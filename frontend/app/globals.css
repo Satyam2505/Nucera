@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background-color: #e6d8c1;
+}
+
+::selection {
+  background: rgba(255, 109, 31, 0.25);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(34, 34, 34, 0.22) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(34, 34, 34, 0.18);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Cream-toned cards, modals, chat bubbles — sits above the page tint,
+   below the linen inputs. Nothing in the ladder is ever pure white. */
+.surface {
+  background: #faf3e1;
+  border: 1px solid rgba(34, 34, 34, 0.09);
+}
+
+.surface-strong {
+  background: #faf3e1;
+  border: 1px solid rgba(34, 34, 34, 0.12);
+  box-shadow: 0 16px 40px -16px rgba(34, 34, 34, 0.22);
+}
+
+/* Deepest cream — sidebar/panel zoning, hover states, subtle bands.
+   Sits *below* the page tone so panels read as recessed. */
+.surface-deep {
+  background: #dbcbaf;
+}
+
+/* Linen — for actual input fields (search bar, chat input, form fields).
+   The brightest step so inputs read as interactive, but still warm cream,
+   never stark #fff. */
+.linen {
+  background: #fdf8ec;
+  border: 1px solid rgba(34, 34, 34, 0.1);
+}
+
+.accent-ring {
+  box-shadow:
+    0 0 0 1px rgba(255, 109, 31, 0.5),
+    0 6px 18px -8px rgba(255, 109, 31, 0.45);
+}
+
+.hero-gradient {
+  background:
+    radial-gradient(50% 40% at 28% 0%, rgba(255, 109, 31, 0.11), transparent 70%),
+    radial-gradient(45% 35% at 88% 8%, rgba(60, 91, 122, 0.09), transparent 70%),
+    #e6d8c1;
+}
+
+.sheen {
+  position: relative;
+  overflow: hidden;
+}
+.sheen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.6) 48%, transparent 62%);
+  transform: translateX(-120%);
+  transition: transform 0.7s ease;
+  pointer-events: none;
+}
+.sheen:hover::before {
+  transform: translateX(120%);
+}
