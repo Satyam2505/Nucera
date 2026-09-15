@@ -111,8 +111,9 @@ class Chunk(Base):
     topic_id = Column(Integer, ForeignKey("topics.id", ondelete="CASCADE"), nullable=False)
     chunk_text = Column(Text, nullable=False)
     chunk_index = Column(Integer, nullable=False)
-    # STUB — populated by the placeholder embedding generator until a real
-    # embedding model is wired in.
+    # Page the chunk came from (1-indexed). Null for plain-text sources,
+    # which have no page structure.
+    page_number = Column(Integer, nullable=True)
     embedding = Column(JSON, nullable=True)
 
     source = relationship("Source", back_populates="chunks")

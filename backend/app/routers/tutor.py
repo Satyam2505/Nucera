@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.database import get_db
 from app.services import graph_service
+from app.services.retrieval_service import retrieve_relevant_chunks
 from app.services.tutor_service import generate_tutor_response
 
 router = APIRouter(tags=["tutor"])
@@ -15,16 +16,18 @@ def ask(payload: schemas.AskRequest, db: Session = Depends(get_db)):
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
 
-    chunks = (
-        db.query(models.Chunk)
-        .filter(models.Chunk.topic_id == payload.topic_id)
-        .limit(5)
-        .all()
-    )
-    context_chunks = [c.chunk_text for c in chunks]
+    # Real retrieval: rank this topic's chunks by relevance to the question
+    # instead of grabbing whichever ones happened to be inserted first.
+    matches = retrieve_relevant_chunks(db, payload.query, topic_id=payload.topic_id, top_k=5)
+    context_chunks = [match["chunk"].chunk_text for match in matches]
 
-    answer = generate_tutor_response(payload.query, context_chunks, topic.name)
     flagged = graph_service.get_unmastered_prerequisites(db, payload.topic_id)
+
+    # generate_tutor_response is still the STUB — it now receives real
+    # retrieved context and real prerequisite gaps, but the answer itself
+    # (and the flagged list surfaced to the user) isn't generated from them
+    # yet. That's the next milestone, not this one.
+    answer = generate_tutor_response(payload.query, context_chunks, topic.name)
 
     db.add(
         models.StudySession(

@@ -43,6 +43,7 @@ class ChunkOut(BaseModel):
     topic_id: int
     chunk_text: str
     chunk_index: int
+    page_number: Optional[int] = None
 
 
 class IngestTextRequest(BaseModel):
@@ -113,3 +114,25 @@ class AskRequest(BaseModel):
 class AskResponse(BaseModel):
     answer: str
     flagged_prerequisites: List[TopicOut]
+
+
+class RetrieveRequest(BaseModel):
+    question: str
+    topic_id: Optional[int] = None
+    source_ids: Optional[List[int]] = None
+    top_k: int = 5
+
+
+class RetrievedChunk(BaseModel):
+    chunk_id: int
+    source_id: int
+    filename: str
+    page_number: Optional[int] = None
+    chunk_index: int
+    similarity_score: float
+    chunk_text: str
+
+
+class RetrieveResponse(BaseModel):
+    question: str
+    results: List[RetrievedChunk]
