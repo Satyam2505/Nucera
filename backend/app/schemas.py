@@ -106,14 +106,32 @@ class QuizSubmitResult(BaseModel):
     mastery: MasteryOut
 
 
+class ChatTurn(BaseModel):
+    role: str  # "user" | "assistant"
+    text: str
+
+
 class AskRequest(BaseModel):
     query: str
     topic_id: int
+    # Short, client-held conversation history (the frontend already keeps
+    # this in memory) — only the most recent few turns are used server-side.
+    # Not persisted; see known limitations re: the sessions table.
+    history: Optional[List[ChatTurn]] = None
+
+
+class SourceCitation(BaseModel):
+    source: str
+    page: Optional[int] = None
 
 
 class AskResponse(BaseModel):
     answer: str
     flagged_prerequisites: List[TopicOut]
+    sources: List[SourceCitation] = []
+    # False when the answer is a fallback (insufficient material, or the
+    # local model was unavailable) rather than a real grounded response.
+    grounded: bool = True
 
 
 class RetrieveRequest(BaseModel):

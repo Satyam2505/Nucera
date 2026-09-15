@@ -1,4 +1,5 @@
 from app import models
+from app.services import llm_service
 
 
 def _create_topic(client, name, course="Test Course"):
@@ -106,7 +107,15 @@ def test_retrieval_returns_the_relevant_chunk_and_filters_by_topic(client):
     assert all(r["filename"] == "BST notes" for r in scoped_results)
 
 
-def test_ask_endpoint_uses_real_retrieval_and_still_flags_prerequisites(client):
+def test_ask_endpoint_uses_real_retrieval_and_still_flags_prerequisites(client, monkeypatch):
+    # This test's job is confirming the prerequisite/mastery pipeline still
+    # works, not exercising the LLM — mock it for determinism and speed.
+    monkeypatch.setattr(
+        llm_service,
+        "generate",
+        lambda system, user, model=None: llm_service.LLMResult(ok=True, text="An answer."),
+    )
+
     prereq_topic = _create_topic(client, "Sets", course="DS&A")
     main_topic_resp = client.post(
         "/topics", json={"name": "Hash Tables", "course": "DS&A", "description": ""}
@@ -133,8 +142,10 @@ def test_ask_endpoint_uses_real_retrieval_and_still_flags_prerequisites(client):
     )
 
     resp = client.post("/ask", json={"query": "How do hash tables work?", "topic_id": main_topic})
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 200, resp.text  # /ask must not crash even with the real tutor wired in
     body = resp.json()
-    assert "[stubbed response]" in body["answer"]  # tutor generation still a stub, as intended
+    # Tutor answer generation itself (grounded/stub/fallback wording) is
+    # covered in test_ask_endpoint_tutor.py — this test's job is confirming
+    # the existing prerequisite/mastery logic still works end to end.
     flagged_names = [t["name"] for t in body["flagged_prerequisites"]]
     assert "Sets" in flagged_names  # existing prerequisite/mastery logic still works

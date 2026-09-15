@@ -2,14 +2,18 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 
-import { api } from "@/lib/api";
+import { api, ChatTurn, SourceCitation } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
 
 interface ChatMessage {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "error";
   text: string;
   flagged?: string[];
+  sources?: SourceCitation[];
+  grounded?: boolean;
 }
+
+const HISTORY_TURNS = 6;
 
 export default function ChatView({ topicId }: { topicId: number | null }) {
   const { topics, refresh } = useAppState();
@@ -32,20 +36,38 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
     e.preventDefault();
     if (!topicId || !input.trim()) return;
     const question = input.trim();
+
+    // Short, client-held history for follow-up context — not persisted
+    // server-side, just the last few turns already visible on screen.
+    const history: ChatTurn[] = messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .slice(-HISTORY_TURNS)
+      .map((m) => ({ role: m.role as "user" | "assistant", text: m.text }));
+
     setMessages((prev) => [...prev, { role: "user", text: question }]);
     setInput("");
     setAsking(true);
     try {
-      const result = await api.ask({ query: question, topic_id: topicId });
+      const result = await api.ask({ query: question, topic_id: topicId, history });
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
           text: result.answer,
           flagged: result.flagged_prerequisites.map((t) => t.name),
+          sources: result.sources,
+          grounded: result.grounded,
         },
       ]);
       refresh();
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "error",
+          text: err instanceof Error ? err.message : "Something went wrong asking the tutor.",
+        },
+      ]);
     } finally {
       setAsking(false);
     }
@@ -60,22 +82,60 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
             <p className="text-xs text-stone-500">Answers are grounded in the material you&apos;ve uploaded.</p>
           </div>
         )}
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div
-              className={`max-w-lg rounded-2xl px-4 py-2.5 text-sm ${
-                m.role === "user" ? "bg-[#FF6D1F] text-[#222222] accent-ring" : "surface text-[#222222]"
-              }`}
-            >
-              <p className="whitespace-pre-wrap">{m.text}</p>
-              {m.flagged && m.flagged.length > 0 && (
-                <p className="mt-2 text-xs text-[#8a5a0a] bg-[#c9860f]/12 border border-[#c9860f]/25 rounded px-2 py-1">
-                  Prerequisite gap: {m.flagged.join(", ")}
-                </p>
-              )}
+        {messages.map((m, i) => {
+          if (m.role === "error") {
+            return (
+              <div key={i} className="flex justify-start">
+                <div className="max-w-lg rounded-2xl px-4 py-2.5 text-sm bg-[#b23a2f]/10 border border-[#b23a2f]/30 text-[#8a2c23]">
+                  {m.text}
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div
+                className={`max-w-lg rounded-2xl px-4 py-2.5 text-sm ${
+                  m.role === "user" ? "bg-[#FF6D1F] text-[#222222] accent-ring" : "surface text-[#222222]"
+                }`}
+              >
+                <p className="whitespace-pre-wrap">{m.text}</p>
+
+                {m.role === "assistant" && m.grounded === false && (
+                  <p className="mt-2 text-xs text-[#8a5a0a] bg-[#c9860f]/12 border border-[#c9860f]/25 rounded px-2 py-1">
+                    This answer isn&apos;t grounded in your uploaded material.
+                  </p>
+                )}
+
+                {m.sources && m.sources.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {m.sources.map((s, si) => (
+                      <span
+                        key={si}
+                        className="text-[11px] text-stone-600 bg-[#222222]/5 border border-[#222222]/10 rounded-full px-2 py-0.5"
+                      >
+                        {s.source}
+                        {s.page != null ? `, p. ${s.page}` : ""}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {m.flagged && m.flagged.length > 0 && (
+                  <p className="mt-2 text-xs text-[#8a5a0a] bg-[#c9860f]/12 border border-[#c9860f]/25 rounded px-2 py-1">
+                    Prerequisite gap: {m.flagged.join(", ")}
+                  </p>
+                )}
+              </div>
             </div>
+          );
+        })}
+        {asking && (
+          <div className="flex justify-start">
+            <div className="max-w-lg rounded-2xl px-4 py-2.5 text-sm surface text-stone-500">Thinking...</div>
           </div>
-        ))}
+        )}
         <div ref={bottomRef} />
       </div>
 

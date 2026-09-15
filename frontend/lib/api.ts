@@ -59,9 +59,21 @@ export interface QuizSubmitResult {
   mastery: Mastery;
 }
 
+export interface SourceCitation {
+  source: string;
+  page: number | null;
+}
+
+export interface ChatTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
 export interface AskResponse {
   answer: string;
   flagged_prerequisites: Topic[];
+  sources: SourceCitation[];
+  grounded: boolean;
 }
 
 export const api = {
@@ -92,7 +104,7 @@ export const api = {
     if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
     return res.json();
   },
-  ask: (payload: { query: string; topic_id: number }) =>
+  ask: (payload: { query: string; topic_id: number; history?: ChatTurn[] }) =>
     request<AskResponse>("/ask", { method: "POST", body: JSON.stringify(payload) }),
   getQuiz: (topicId: number) => request<QuizQuestion[]>(`/quiz/${topicId}`),
   submitQuiz: (payload: {

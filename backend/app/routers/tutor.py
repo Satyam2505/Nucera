@@ -5,7 +5,7 @@ from app import models, schemas
 from app.database import get_db
 from app.services import graph_service
 from app.services.retrieval_service import retrieve_relevant_chunks
-from app.services.tutor_service import generate_tutor_response
+from app.services.tutor_service import generate_tutor_answer
 
 router = APIRouter(tags=["tutor"])
 
@@ -16,18 +16,46 @@ def ask(payload: schemas.AskRequest, db: Session = Depends(get_db)):
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
 
-    # Real retrieval: rank this topic's chunks by relevance to the question
-    # instead of grabbing whichever ones happened to be inserted first.
+    # 1. RAG grounding — the top relevant chunks from this topic's material.
     matches = retrieve_relevant_chunks(db, payload.query, topic_id=payload.topic_id, top_k=5)
-    context_chunks = [match["chunk"].chunk_text for match in matches]
+    retrieved_chunks = [
+        {
+            "source": match["source"].title,
+            "page": match["chunk"].page_number,
+            "text": match["chunk"].chunk_text,
+            "similarity": match["similarity_score"],
+        }
+        for match in matches
+    ]
 
-    flagged = graph_service.get_unmastered_prerequisites(db, payload.topic_id)
+    # 2. Adaptive guidance — prerequisite gaps, each paired with its actual
+    # mastery score (graph_service only knows which topics are unmastered,
+    # not by how much).
+    flagged_topics = graph_service.get_unmastered_prerequisites(db, payload.topic_id)
+    gap_mastery_by_topic = {
+        m.topic_id: m
+        for m in db.query(models.Mastery)
+        .filter(models.Mastery.topic_id.in_([t.id for t in flagged_topics]))
+        .all()
+    }
+    prerequisite_gaps = [
+        {"name": t.name, "score": gap_mastery_by_topic[t.id].score if t.id in gap_mastery_by_topic else 0}
+        for t in flagged_topics
+    ]
 
-    # generate_tutor_response is still the STUB — it now receives real
-    # retrieved context and real prerequisite gaps, but the answer itself
-    # (and the flagged list surfaced to the user) isn't generated from them
-    # yet. That's the next milestone, not this one.
-    answer = generate_tutor_response(payload.query, context_chunks, topic.name)
+    topic_mastery = db.get(models.Mastery, payload.topic_id)
+    topic_score = topic_mastery.score if topic_mastery else 0
+
+    history = [turn.model_dump() for turn in (payload.history or [])]
+
+    result = generate_tutor_answer(
+        question=payload.query,
+        retrieved_chunks=retrieved_chunks,
+        topic_name=topic.name,
+        topic_mastery_score=topic_score,
+        prerequisite_gaps=prerequisite_gaps,
+        history=history,
+    )
 
     db.add(
         models.StudySession(
@@ -36,4 +64,9 @@ def ask(payload: schemas.AskRequest, db: Session = Depends(get_db)):
     )
     db.commit()
 
-    return schemas.AskResponse(answer=answer, flagged_prerequisites=flagged)
+    return schemas.AskResponse(
+        answer=result.answer,
+        flagged_prerequisites=flagged_topics,
+        sources=[schemas.SourceCitation(**s) for s in result.sources],
+        grounded=result.grounded,
+    )
