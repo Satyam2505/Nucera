@@ -9,6 +9,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const body = await res.text();
     throw new Error(`API error ${res.status}: ${body}`);
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -64,6 +65,15 @@ export interface SourceCitation {
   page: number | null;
 }
 
+export interface Source {
+  id: number;
+  topic_id: number;
+  source_type: string;
+  title: string;
+  created_at: string;
+  chunk_count: number;
+}
+
 export interface ChatTurn {
   role: "user" | "assistant";
   text: string;
@@ -106,6 +116,9 @@ export const api = {
   },
   ask: (payload: { query: string; topic_id: number; history?: ChatTurn[] }) =>
     request<AskResponse>("/ask", { method: "POST", body: JSON.stringify(payload) }),
+  listSources: (topicId: number) => request<Source[]>(`/sources/topic/${topicId}`),
+  deleteSource: (sourceId: number) =>
+    request<void>(`/sources/${sourceId}`, { method: "DELETE" }),
   getQuiz: (topicId: number) => request<QuizQuestion[]>(`/quiz/${topicId}`),
   submitQuiz: (payload: {
     topic_id: number;

@@ -85,3 +85,12 @@ async def ingest_file(
 @router.get("/topic/{topic_id}", response_model=list[schemas.SourceOut])
 def list_sources_for_topic(topic_id: int, db: Session = Depends(get_db)):
     return db.query(models.Source).filter(models.Source.topic_id == topic_id).all()
+
+
+@router.delete("/{source_id}", status_code=204)
+def delete_source(source_id: int, db: Session = Depends(get_db)):
+    source = db.get(models.Source, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found")
+    db.delete(source)
+    db.commit()

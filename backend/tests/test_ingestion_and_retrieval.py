@@ -59,6 +59,60 @@ def test_ingest_pdf_upload_extracts_real_text_and_tracks_page_numbers(
     assert "binary search tree" in joined
 
 
+def test_list_sources_reports_chunk_count(client):
+    topic_id = _create_topic(client, "Recursion")
+
+    resp = client.post(
+        "/sources/text",
+        json={
+            "topic_id": topic_id,
+            "source_type": "self_supplied",
+            "title": "Recursion notes",
+            "text": "A recursive function calls itself with a smaller input until it hits a base case.",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    source_id = resp.json()["id"]
+
+    listed = client.get(f"/sources/topic/{topic_id}")
+    assert listed.status_code == 200, listed.text
+    sources = listed.json()
+    assert len(sources) == 1
+    assert sources[0]["id"] == source_id
+    assert sources[0]["chunk_count"] >= 1
+
+
+def test_delete_source_removes_it_and_its_chunks(client, db_session):
+    topic_id = _create_topic(client, "Hashing")
+
+    resp = client.post(
+        "/sources/text",
+        json={
+            "topic_id": topic_id,
+            "source_type": "self_supplied",
+            "title": "Hashing notes",
+            "text": "A hash function maps keys to bucket indices for fast average-case lookup.",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    source_id = resp.json()["id"]
+    assert db_session.query(models.Chunk).filter(models.Chunk.source_id == source_id).count() >= 1
+
+    delete_resp = client.delete(f"/sources/{source_id}")
+    assert delete_resp.status_code == 204
+
+    assert db_session.get(models.Source, source_id) is None
+    assert db_session.query(models.Chunk).filter(models.Chunk.source_id == source_id).count() == 0
+
+    listed = client.get(f"/sources/topic/{topic_id}")
+    assert listed.json() == []
+
+
+def test_delete_missing_source_returns_404(client):
+    resp = client.delete("/sources/999999")
+    assert resp.status_code == 404
+
+
 def test_retrieval_returns_the_relevant_chunk_and_filters_by_topic(client):
     normalization_topic = _create_topic(client, "Normalization")
     bst_topic = _create_topic(client, "Binary Search Trees")

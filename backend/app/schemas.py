@@ -34,6 +34,7 @@ class SourceOut(BaseModel):
     source_type: SourceType
     title: str
     created_at: datetime
+    chunk_count: int
 
 
 class ChunkOut(BaseModel):

@@ -102,6 +102,10 @@ class Source(Base):
     topic = relationship("Topic", back_populates="sources")
     chunks = relationship("Chunk", back_populates="source", cascade="all, delete-orphan")
 
+    @property
+    def chunk_count(self) -> int:
+        return len(self.chunks)
+
 
 class Chunk(Base):
     __tablename__ = "chunks"

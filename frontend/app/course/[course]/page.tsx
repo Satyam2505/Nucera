@@ -8,11 +8,12 @@ import ChatView from "@/components/course/ChatView";
 import GraphView from "@/components/course/GraphView";
 import MasteryView from "@/components/course/MasteryView";
 import QuizView from "@/components/course/QuizView";
+import SourcesView from "@/components/course/SourcesView";
 import UploadModal from "@/components/UploadModal";
 import { useAppState } from "@/lib/AppStateContext";
 import { STATUS_COLOR, type MasteryStatusKey } from "@/lib/status-colors";
 
-type ViewKey = "chat" | "quiz" | "graph" | "mastery";
+type ViewKey = "chat" | "quiz" | "graph" | "mastery" | "sources";
 
 const VIEWS: { key: ViewKey; label: string; icon: ReactNode }[] = [
   {
@@ -56,6 +57,16 @@ const VIEWS: { key: ViewKey; label: string; icon: ReactNode }[] = [
       </svg>
     ),
   },
+  {
+    key: "sources",
+    label: "Sources",
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+        <path d="M14 2v6h6M9 13h6M9 17h6" strokeLinecap="round" />
+      </svg>
+    ),
+  },
 ];
 
 function ListIcon() {
@@ -74,6 +85,10 @@ export default function CourseWorkspace() {
   const [view, setView] = useState<ViewKey>("chat");
   const [showUpload, setShowUpload] = useState(false);
   const [topicsOpen, setTopicsOpen] = useState(true);
+  // Bumped whenever the upload modal closes so SourcesView (which keeps its
+  // own fetched list, not part of global AppState) refetches — otherwise
+  // adding a source via the header button wouldn't show up there.
+  const [sourcesRefreshKey, setSourcesRefreshKey] = useState(0);
 
   // Same reasoning as the landing page's AppSidebar: this 256px topics
   // column is an overlay below md, so it should default closed there
@@ -185,11 +200,25 @@ export default function CourseWorkspace() {
             {view === "quiz" && <QuizView topicId={activeTopicId} />}
             {view === "graph" && <GraphView courseName={courseName} />}
             {view === "mastery" && <MasteryView courseTopics={courseTopics} />}
+            {view === "sources" && (
+              <SourcesView
+                topicId={activeTopicId}
+                refreshKey={sourcesRefreshKey}
+                onAddSource={() => setShowUpload(true)}
+              />
+            )}
           </div>
         </main>
       </div>
 
-      {showUpload && <UploadModal onClose={() => setShowUpload(false)} />}
+      {showUpload && (
+        <UploadModal
+          onClose={() => {
+            setShowUpload(false);
+            setSourcesRefreshKey((k) => k + 1);
+          }}
+        />
+      )}
     </div>
   );
 }
