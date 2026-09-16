@@ -2,10 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-// STUB — no real authentication is wired up yet. This just simulates the
-// logged-in/logged-out UI states locally so the account menu has somewhere
-// to live once real auth (and a real user) is added later.
-const STUB_USER = { name: "Guest User", email: "guest@edupilot.ai" };
+import { useAuth } from "@/lib/AuthContext";
 
 function ChevronIcon() {
   return (
@@ -16,10 +13,12 @@ function ChevronIcon() {
 }
 
 export default function AccountMenu({ collapsed }: { collapsed: boolean }) {
-  const [loggedIn, setLoggedIn] = useState(false);
+  // AccountMenu only ever renders inside AuthGate's authenticated branch,
+  // so `user` is guaranteed non-null here.
+  const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
 
-  const initial = loggedIn ? STUB_USER.name.charAt(0).toUpperCase() : "?";
+  const initial = user?.email.charAt(0).toUpperCase() ?? "?";
 
   useEffect(() => {
     if (!open) return;
@@ -44,12 +43,8 @@ export default function AccountMenu({ collapsed }: { collapsed: boolean }) {
         {!collapsed && (
           <>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium text-[var(--ink)] truncate">
-                {loggedIn ? STUB_USER.name : "Guest"}
-              </span>
-              <span className="block text-[11px] text-stone-500 dark:text-stone-400 truncate">
-                {loggedIn ? STUB_USER.email : "Not signed in"}
-              </span>
+              <span className="block text-sm font-medium text-[var(--ink)] truncate">{user?.email}</span>
+              <span className="block text-[11px] text-stone-500 dark:text-stone-400 truncate">Signed in</span>
             </span>
             <span className="text-stone-500 dark:text-stone-400 shrink-0">
               <ChevronIcon />
@@ -66,33 +61,18 @@ export default function AccountMenu({ collapsed }: { collapsed: boolean }) {
               collapsed ? "left-2 w-48" : "left-2 right-2"
             }`}
           >
-            {loggedIn ? (
-              <>
-                <div className="px-3 py-2 border-b border-[rgba(var(--ink-rgb),0.10)]">
-                  <p className="text-sm font-medium text-[var(--ink)] truncate">{STUB_USER.name}</p>
-                  <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{STUB_USER.email}</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setLoggedIn(false);
-                    setOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-sm text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.06)] transition"
-                >
-                  Log out
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => {
-                  setLoggedIn(true);
-                  setOpen(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.06)] transition"
-              >
-                Log in
-              </button>
-            )}
+            <div className="px-3 py-2 border-b border-[rgba(var(--ink-rgb),0.10)]">
+              <p className="text-sm font-medium text-[var(--ink)] truncate">{user?.email}</p>
+            </div>
+            <button
+              onClick={() => {
+                logout();
+                setOpen(false);
+              }}
+              className="w-full text-left px-3 py-2 text-sm text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.06)] transition"
+            >
+              Log out
+            </button>
           </div>
         </>
       )}

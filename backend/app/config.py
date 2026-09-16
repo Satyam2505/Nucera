@@ -20,3 +20,10 @@ OLLAMA_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
 # app/services/tutor_service.py. Tuned empirically against real retrieval
 # results (see backend/tests and the milestone verification notes).
 RETRIEVAL_RELEVANCE_THRESHOLD = float(os.getenv("RETRIEVAL_RELEVANCE_THRESHOLD", "0.35"))
+
+# Auth. JWT_SECRET_KEY MUST be overridden via env in any real deployment —
+# the fallback only exists so local dev works out of the box on a single
+# machine with no other users.
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-only-insecure-secret-change-me")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "10080"))  # 7 days

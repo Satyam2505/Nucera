@@ -51,11 +51,27 @@ def db_session():
 
 @pytest.fixture()
 def client():
+    """A TestClient pre-authenticated as a fresh test user.
+
+    Registers and logs in once per test, then attaches the token as a
+    default header, so existing calls like `client.post("/topics", ...)`
+    keep working unchanged now that most routes require auth.
+    """
     from fastapi.testclient import TestClient
 
     from app.main import app
 
-    return TestClient(app)
+    test_client = TestClient(app)
+    test_client.post(
+        "/auth/register", json={"email": "test-user@example.com", "password": "testpassword123"}
+    )
+    login = test_client.post(
+        "/auth/login",
+        data={"username": "test-user@example.com", "password": "testpassword123"},
+    )
+    token = login.json()["access_token"]
+    test_client.headers.update({"Authorization": f"Bearer {token}"})
+    return test_client
 
 
 @pytest.fixture()

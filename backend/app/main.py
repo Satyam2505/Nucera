@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import ingestion, mastery, quiz, retrieval, topics, tutor
+from app.routers import auth, ingestion, mastery, quiz, retrieval, topics, tutor
 
 app = FastAPI(title="EduPilot AI", version="0.1.0")
 
@@ -13,6 +13,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(topics.router)
 app.include_router(ingestion.router)
 app.include_router(mastery.router)

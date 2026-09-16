@@ -35,14 +35,28 @@ class SessionType(str, enum.Enum):
     chat = "chat"
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    topics = relationship("Topic", back_populates="owner")
+
+
 class Topic(Base):
     __tablename__ = "topics"
 
     id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     name = Column(String(255), nullable=False)
     course = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    owner = relationship("User", back_populates="topics")
 
     mastery = relationship(
         "Mastery", back_populates="topic", uselist=False, cascade="all, delete-orphan"

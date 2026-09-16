@@ -1,7 +1,8 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 
-import { AppStateProvider } from "@/lib/AppStateContext";
+import AuthGate from "@/components/AuthGate";
+import { AuthProvider } from "@/lib/AuthContext";
 
 export const metadata = {
   title: "EduPilot AI",
@@ -20,7 +21,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="h-full bg-[var(--bg-page)] text-[var(--ink)] antialiased">
-        <AppStateProvider>{children}</AppStateProvider>
+        <AuthProvider>
+          <AuthGate>{children}</AuthGate>
+        </AuthProvider>
       </body>
     </html>
   );

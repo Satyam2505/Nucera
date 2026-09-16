@@ -1,8 +1,15 @@
+import { getToken } from "./token";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     ...options,
   });
   if (!res.ok) {
@@ -11,6 +18,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+export interface User {
+  id: number;
+  email: string;
+  created_at: string;
 }
 
 export interface Topic {
@@ -87,6 +100,22 @@ export interface AskResponse {
 }
 
 export const api = {
+  register: (email: string, password: string) =>
+    request<User>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  login: async (email: string, password: string) => {
+    const body = new URLSearchParams({ username: email, password });
+    const res = await fetch(`${API_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+    return res.json() as Promise<{ access_token: string; token_type: string }>;
+  },
+  me: () => request<User>("/auth/me"),
   listTopics: () => request<Topic[]>("/topics"),
   createTopic: (payload: { name: string; course: string; description?: string }) =>
     request<Topic>("/topics", { method: "POST", body: JSON.stringify(payload) }),
@@ -110,7 +139,11 @@ export const api = {
     formData.append("topic_id", String(topicId));
     formData.append("source_type", sourceType);
     formData.append("file", file);
-    const res = await fetch(`${API_URL}/sources/upload`, { method: "POST", body: formData });
+    const res = await fetch(`${API_URL}/sources/upload`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: formData,
+    });
     if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
     return res.json();
   },
