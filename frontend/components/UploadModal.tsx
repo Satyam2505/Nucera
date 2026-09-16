@@ -10,7 +10,7 @@ import Modal from "./Modal";
 const SOURCE_TYPES = ["official_upload", "self_supplied", "web_fallback"];
 
 const inputClass =
-  "w-full rounded-lg linen px-3 py-2 text-sm text-[#222222] placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#FF6D1F]/30 focus:border-[#FF6D1F]/50 transition";
+  "w-full rounded-lg linen px-3 py-2 text-sm text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:ring-2 focus:ring-[rgba(var(--accent-rgb),0.30)] focus:border-[rgba(var(--accent-rgb),0.50)] transition";
 
 export default function UploadModal({ onClose }: { onClose: () => void }) {
   const { topics, selectedTopicId, refresh } = useAppState();
@@ -52,7 +52,7 @@ export default function UploadModal({ onClose }: { onClose: () => void }) {
     <Modal title="Add source" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-medium text-stone-600 mb-1">Topic</label>
+          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Topic</label>
           <select
             className={inputClass}
             value={topicId ?? ""}
@@ -67,7 +67,7 @@ export default function UploadModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-stone-600 mb-1">Source type</label>
+          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Source type</label>
           <select className={inputClass} value={sourceType} onChange={(e) => setSourceType(e.target.value)}>
             {SOURCE_TYPES.map((s) => (
               <option key={s} value={s}>
@@ -78,7 +78,7 @@ export default function UploadModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-stone-600 mb-1">Title</label>
+          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Title</label>
           <input
             className={inputClass}
             value={title}
@@ -88,7 +88,7 @@ export default function UploadModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-stone-600 mb-1">Paste text</label>
+          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Paste text</label>
           <textarea
             className={`${inputClass} h-28`}
             value={text}
@@ -98,23 +98,23 @@ export default function UploadModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-stone-600 mb-1">Or upload a file</label>
+          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Or upload a file</label>
           <input
             type="file"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="text-sm text-stone-600 file:mr-3 file:rounded-lg file:border-0 file:bg-[#FF6D1F] file:text-[#222222] file:px-3 file:py-1.5 file:text-xs hover:file:bg-[#e6600f]"
+            className="text-sm text-stone-600 dark:text-stone-300 file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--accent)] file:text-[var(--accent-ink)] file:px-3 file:py-1.5 file:text-xs hover:file:bg-[var(--accent-hover)]"
           />
         </div>
 
         <button
           type="submit"
           disabled={submitting || !topicId}
-          className="w-full rounded-lg bg-[#FF6D1F] hover:bg-[#e6600f] transition text-[#222222] text-sm font-medium py-2.5 disabled:opacity-50 accent-ring"
+          className="w-full rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition text-[var(--accent-ink)] text-sm font-medium py-2.5 disabled:opacity-50 accent-ring"
         >
           {submitting ? "Adding..." : "Add source"}
         </button>
 
-        {status && <p className="text-xs text-stone-600 text-center">{status}</p>}
+        {status && <p className="text-xs text-stone-600 dark:text-stone-300 text-center">{status}</p>}
       </form>
     </Modal>
   );

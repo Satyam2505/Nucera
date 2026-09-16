@@ -23,9 +23,9 @@ export default function GraphView({ courseName }: { courseName: string }) {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center gap-4 px-6 py-3 border-b border-[#222222]/10 text-xs">
+      <div className="flex items-center gap-4 px-6 py-3 border-b border-[rgba(var(--ink-rgb),0.10)] text-xs">
         {LEGEND_ORDER.map((status) => (
-          <div key={status} className="flex items-center gap-1.5 text-stone-600">
+          <div key={status} className="flex items-center gap-1.5 text-stone-600 dark:text-stone-400">
             <span className="h-2 w-2 rounded-full" style={{ background: STATUS_COLOR[status] }} aria-hidden />
             {STATUS_LABEL[status]}
           </div>
@@ -33,13 +33,13 @@ export default function GraphView({ courseName }: { courseName: string }) {
       </div>
 
       <div className="flex-1">
-        {!filtered && <p className="p-6 text-sm text-stone-500">Loading graph...</p>}
+        {!filtered && <p className="p-6 text-sm text-stone-500 dark:text-stone-400">Loading graph...</p>}
         {filtered && filtered.nodes.length === 0 && (
-          <p className="p-6 text-sm text-stone-500">No topics in this course yet.</p>
+          <p className="p-6 text-sm text-stone-500 dark:text-stone-400">No topics in this course yet.</p>
         )}
         {filtered && filtered.nodes.length > 0 && (
           <ReactFlow nodes={layoutNodes(filtered)} edges={buildEdges(filtered)} fitView>
-            <Background color="rgba(34,34,34,0.14)" gap={20} />
+            <Background color="rgba(var(--ink-rgb), 0.14)" gap={20} />
             <Controls />
           </ReactFlow>
         )}

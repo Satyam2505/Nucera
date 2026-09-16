@@ -44,8 +44,8 @@ export function layoutNodes(data: GraphData, xGap = 220, yGap = 110, compact = f
         padding: compact ? 6 : 10,
         fontSize: compact ? 10 : 12,
         whiteSpace: "pre-line" as const,
-        color: "#222222",
-        boxShadow: "0 1px 3px rgba(34,34,34,0.12)",
+        color: "var(--ink)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
       },
     };
   });
@@ -56,8 +56,8 @@ export function buildEdges(data: GraphData): Edge[] {
     id: `${edge.source}-${edge.target}`,
     source: String(edge.source),
     target: String(edge.target),
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(34,34,34,0.4)" },
-    style: { stroke: "rgba(34,34,34,0.3)" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(var(--ink-rgb), 0.4)" },
+    style: { stroke: "rgba(var(--ink-rgb), 0.3)" },
   }));
 }
 

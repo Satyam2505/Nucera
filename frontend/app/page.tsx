@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import AppSidebar from "@/components/AppSidebar";
 import CreateCourseModal from "@/components/CreateCourseModal";
@@ -14,6 +14,14 @@ export default function LandingPage() {
   const [collapsed, setCollapsed] = useState(false);
   const [highlight, setHighlight] = useState(false);
   const libraryRef = useRef<HTMLDivElement>(null);
+
+  // Server-rendered state always starts expanded (matches desktop) — on a
+  // narrow window the sidebar is an overlay (see AppSidebar), so it should
+  // default closed rather than covering the page on first paint. Done in
+  // an effect, after hydration, so there's no SSR/client mismatch.
+  useEffect(() => {
+    if (window.innerWidth < 768) setCollapsed(true);
+  }, []);
 
   const courses = useMemo(() => summarizeCourses(topics, masteryByTopic), [topics, masteryByTopic]);
   const filtered = query
@@ -41,9 +49,9 @@ export default function LandingPage() {
         libraryRef={libraryRef}
       />
 
-      <main className="flex-1 hero-gradient overflow-y-auto">
+      <main className="flex-1 min-w-0 hero-gradient overflow-y-auto">
         <div className="min-h-full flex flex-col items-center justify-center px-6 text-center">
-          <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-[#222222] mb-8">
+          <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-[var(--ink)] mb-8">
             Welcome back!
           </h1>
 
@@ -56,7 +64,7 @@ export default function LandingPage() {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
-                className="text-stone-400 shrink-0"
+                className="text-stone-400 dark:text-stone-500 shrink-0"
               >
                 <circle cx="11" cy="11" r="7" />
                 <path d="m21 21-4.3-4.3" />
@@ -66,14 +74,14 @@ export default function LandingPage() {
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && browseCourses()}
                 placeholder="Search your courses..."
-                className="flex-1 bg-transparent outline-none text-sm placeholder:text-stone-400 text-[#222222]"
+                className="flex-1 bg-transparent outline-none text-sm placeholder:text-stone-400 dark:placeholder:text-stone-500 text-[var(--ink)]"
               />
             </div>
           </div>
 
           <button
             onClick={browseCourses}
-            className="mt-6 rounded-full bg-[#FF6D1F] hover:bg-[#e6600f] transition text-sm font-medium px-5 py-2.5 text-[#222222] accent-ring"
+            className="mt-6 rounded-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition text-sm font-medium px-5 py-2.5 text-[var(--accent-ink)] accent-ring"
           >
             Browse courses
           </button>

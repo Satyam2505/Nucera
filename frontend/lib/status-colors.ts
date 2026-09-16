@@ -7,20 +7,24 @@ export type MasteryStatusKey = "mastered" | "in_progress" | "unmastered" | "miss
 // pairs the color with a text label, never color alone. "unmastered"
 // deliberately sits outside the ramp (not a status, just "no signal yet")
 // and uses a neutral warm gray instead.
+//
+// Values are CSS custom properties (see globals.css) so every consumer —
+// Tailwind inline styles, React Flow node styles, raw SVG — repaints for
+// dark mode automatically without any JS-side theme check.
 export const STATUS_COLOR: Record<MasteryStatusKey, string> = {
-  mastered: "#3f7d3a",
-  in_progress: "#c9860f",
-  unmastered: "#857f6b",
-  missed: "#b23a2f",
+  mastered: "var(--status-mastered)",
+  in_progress: "var(--status-in-progress)",
+  unmastered: "var(--status-unmastered)",
+  missed: "var(--status-missed)",
 };
 
-// Translucent tints of the same hues, for fills on the cream surface
+// Translucent tints of the same hues, for fills on the surface
 // (node backgrounds, badge backgrounds, donut track segments).
 export const STATUS_FILL: Record<MasteryStatusKey, string> = {
-  mastered: "rgba(63, 125, 58, 0.14)",
-  in_progress: "rgba(201, 134, 15, 0.16)",
-  unmastered: "rgba(34, 34, 34, 0.07)",
-  missed: "rgba(178, 58, 47, 0.14)",
+  mastered: "var(--status-mastered-fill)",
+  in_progress: "var(--status-in-progress-fill)",
+  unmastered: "var(--status-unmastered-fill)",
+  missed: "var(--status-missed-fill)",
 };
 
 export const STATUS_LABEL: Record<MasteryStatusKey, string> = {

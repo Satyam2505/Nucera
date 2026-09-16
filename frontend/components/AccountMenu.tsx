@@ -31,27 +31,27 @@ export default function AccountMenu({ collapsed }: { collapsed: boolean }) {
   }, [open]);
 
   return (
-    <div className="relative border-t border-[#222222]/10 p-2">
+    <div className="relative border-t border-[rgba(var(--ink-rgb),0.10)] p-2">
       <button
         onClick={() => setOpen((v) => !v)}
-        className={`w-full flex items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-[#222222]/8 transition ${
+        className={`w-full flex items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-[rgba(var(--ink-rgb),0.08)] transition ${
           collapsed ? "justify-center" : "text-left"
         }`}
       >
-        <span className="h-8 w-8 rounded-full bg-[#FF6D1F]/20 border border-[#FF6D1F]/40 flex items-center justify-center text-xs font-semibold text-[#e6600f] shrink-0">
+        <span className="h-8 w-8 rounded-full bg-[rgba(var(--accent-rgb),0.2)] border border-[rgba(var(--accent-rgb),0.4)] flex items-center justify-center text-xs font-semibold text-[var(--accent-hover)] shrink-0">
           {initial}
         </span>
         {!collapsed && (
           <>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium text-[#222222] truncate">
+              <span className="block text-sm font-medium text-[var(--ink)] truncate">
                 {loggedIn ? STUB_USER.name : "Guest"}
               </span>
-              <span className="block text-[11px] text-stone-500 truncate">
+              <span className="block text-[11px] text-stone-500 dark:text-stone-400 truncate">
                 {loggedIn ? STUB_USER.email : "Not signed in"}
               </span>
             </span>
-            <span className="text-stone-500 shrink-0">
+            <span className="text-stone-500 dark:text-stone-400 shrink-0">
               <ChevronIcon />
             </span>
           </>
@@ -68,16 +68,16 @@ export default function AccountMenu({ collapsed }: { collapsed: boolean }) {
           >
             {loggedIn ? (
               <>
-                <div className="px-3 py-2 border-b border-[#222222]/10">
-                  <p className="text-sm font-medium text-[#222222] truncate">{STUB_USER.name}</p>
-                  <p className="text-xs text-stone-500 truncate">{STUB_USER.email}</p>
+                <div className="px-3 py-2 border-b border-[rgba(var(--ink-rgb),0.10)]">
+                  <p className="text-sm font-medium text-[var(--ink)] truncate">{STUB_USER.name}</p>
+                  <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{STUB_USER.email}</p>
                 </div>
                 <button
                   onClick={() => {
                     setLoggedIn(false);
                     setOpen(false);
                   }}
-                  className="w-full text-left px-3 py-2 text-sm text-[#222222] hover:bg-[#222222]/6 transition"
+                  className="w-full text-left px-3 py-2 text-sm text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.06)] transition"
                 >
                   Log out
                 </button>
@@ -88,7 +88,7 @@ export default function AccountMenu({ collapsed }: { collapsed: boolean }) {
                   setLoggedIn(true);
                   setOpen(false);
                 }}
-                className="w-full text-left px-3 py-2 text-sm text-[#222222] hover:bg-[#222222]/6 transition"
+                className="w-full text-left px-3 py-2 text-sm text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.06)] transition"
               >
                 Log in
               </button>

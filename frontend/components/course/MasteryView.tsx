@@ -53,7 +53,7 @@ export default function MasteryView({ courseTopics }: { courseTopics: Topic[] })
   const lagging = [...entries].filter((e) => e.score < 40).sort((a, b) => a.score - b.score);
 
   if (courseTopics.length === 0) {
-    return <div className="p-8 text-sm text-stone-500">No topics in this course yet.</div>;
+    return <div className="p-8 text-sm text-stone-500 dark:text-stone-400">No topics in this course yet.</div>;
   }
 
   let cumulative = 0;
@@ -71,7 +71,7 @@ export default function MasteryView({ courseTopics }: { courseTopics: Topic[] })
             cy={SIZE / 2}
             r={RADIUS}
             fill="none"
-            stroke="rgba(34,34,34,0.08)"
+            stroke="rgba(var(--ink-rgb), 0.08)"
             strokeWidth={STROKE}
           />
           {ORDER.map((status) => {
@@ -97,9 +97,9 @@ export default function MasteryView({ courseTopics }: { courseTopics: Topic[] })
           })}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-3xl font-semibold text-[#222222]">{avgScore}</span>
-          <span className="text-[11px] text-stone-500 mt-0.5">course mastery</span>
-          <span className="text-[10px] text-[#e6600f] mt-2 group-hover:underline">
+          <span className="text-3xl font-semibold text-[var(--ink)]">{avgScore}</span>
+          <span className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">course mastery</span>
+          <span className="text-[10px] text-[var(--accent-hover)] mt-2 group-hover:underline">
             {expanded ? "Hide breakdown" : "Click for breakdown"}
           </span>
         </div>
@@ -107,7 +107,7 @@ export default function MasteryView({ courseTopics }: { courseTopics: Topic[] })
 
       <div className="flex items-center gap-4 flex-wrap justify-center">
         {ORDER.map((status) => (
-          <div key={status} className="flex items-center gap-1.5 text-xs text-stone-600">
+          <div key={status} className="flex items-center gap-1.5 text-xs text-stone-600 dark:text-stone-400">
             <span className="h-2 w-2 rounded-full" style={{ background: STATUS_COLOR[status] }} />
             {STATUS_LABEL[status]} ({counts[status]})
           </div>
@@ -146,12 +146,12 @@ function BreakdownList({
       <p className="text-xs font-medium mb-3" style={{ color: STATUS_COLOR[tone] }}>
         {title}
       </p>
-      {items.length === 0 && <p className="text-xs text-stone-500">{empty}</p>}
+      {items.length === 0 && <p className="text-xs text-stone-500 dark:text-stone-400">{empty}</p>}
       <ul className="space-y-2">
         {items.map(({ topic, score }) => (
-          <li key={topic.id} className="flex items-center justify-between text-sm text-[#222222]">
+          <li key={topic.id} className="flex items-center justify-between text-sm text-[var(--ink)]">
             <span className="truncate pr-2">{topic.name}</span>
-            <span className="text-xs text-stone-500 shrink-0">{score}</span>
+            <span className="text-xs text-stone-500 dark:text-stone-400 shrink-0">{score}</span>
           </li>
         ))}
       </ul>

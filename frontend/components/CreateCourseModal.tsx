@@ -9,7 +9,7 @@ import { useAppState } from "@/lib/AppStateContext";
 import Modal from "./Modal";
 
 const inputClass =
-  "w-full rounded-lg linen px-3 py-2 text-sm text-[#222222] placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#FF6D1F]/30 focus:border-[#FF6D1F]/50 transition";
+  "w-full rounded-lg linen px-3 py-2 text-sm text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:ring-2 focus:ring-[rgba(var(--accent-rgb),0.30)] focus:border-[rgba(var(--accent-rgb),0.50)] transition";
 
 export default function CreateCourseModal({ onClose }: { onClose: () => void }) {
   const { refresh } = useAppState();
@@ -45,7 +45,7 @@ export default function CreateCourseModal({ onClose }: { onClose: () => void }) 
     <Modal title="List a new course" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-medium text-stone-600 mb-1">Course name</label>
+          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Course name</label>
           <input
             className={inputClass}
             value={courseName}
@@ -54,7 +54,7 @@ export default function CreateCourseModal({ onClose }: { onClose: () => void }) 
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-stone-600 mb-1">First topic name</label>
+          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">First topic name</label>
           <input
             className={inputClass}
             value={topicName}
@@ -63,7 +63,7 @@ export default function CreateCourseModal({ onClose }: { onClose: () => void }) 
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-stone-600 mb-1">Description (optional)</label>
+          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Description (optional)</label>
           <textarea
             className={`${inputClass} h-20`}
             value={description}
@@ -73,12 +73,12 @@ export default function CreateCourseModal({ onClose }: { onClose: () => void }) 
         <button
           type="submit"
           disabled={submitting || !courseName.trim() || !topicName.trim()}
-          className="w-full rounded-lg bg-[#FF6D1F] hover:bg-[#e6600f] transition text-[#222222] text-sm font-medium py-2.5 disabled:opacity-50 accent-ring"
+          className="w-full rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition text-[var(--accent-ink)] text-sm font-medium py-2.5 disabled:opacity-50 accent-ring"
         >
           {submitting ? "Creating..." : "Create course"}
         </button>
-        {error && <p className="text-xs text-[#b23a2f] text-center">{error}</p>}
-        <p className="text-[11px] text-stone-500 text-center">
+        {error && <p className="text-xs text-[var(--error-text)] text-center">{error}</p>}
+        <p className="text-[11px] text-stone-500 dark:text-stone-400 text-center">
           You can add more topics and prerequisites to it from inside the course.
         </p>
       </form>

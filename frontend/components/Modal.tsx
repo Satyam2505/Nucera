@@ -23,18 +23,18 @@ export default function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#222222]/50 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.5)] backdrop-blur-sm p-4"
       onClick={onClose}
     >
       <div
         className={`w-full ${wide ? "max-w-2xl" : "max-w-md"} rounded-2xl surface-strong max-h-[85vh] overflow-y-auto`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#222222]/10 sticky top-0 bg-[#FAF3E1]">
-          <h2 className="text-base font-semibold text-[#222222]">{title}</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(var(--ink-rgb),0.10)] sticky top-0 bg-[var(--bg-surface)]">
+          <h2 className="text-base font-semibold text-[var(--ink)]">{title}</h2>
           <button
             onClick={onClose}
-            className="text-stone-500 hover:text-[#222222] rounded-full p-1 hover:bg-[#222222]/8 transition"
+            className="text-stone-500 dark:text-stone-400 hover:text-[var(--ink)] rounded-full p-1 hover:bg-[rgba(var(--ink-rgb),0.08)] transition"
             aria-label="Close"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -78,15 +78,15 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-4">
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center gap-1.5">
-            <p className="text-sm text-stone-600">Ask anything about {topic?.name ?? "this topic"}.</p>
-            <p className="text-xs text-stone-500">Answers are grounded in the material you&apos;ve uploaded.</p>
+            <p className="text-sm text-stone-600 dark:text-stone-400">Ask anything about {topic?.name ?? "this topic"}.</p>
+            <p className="text-xs text-stone-500 dark:text-stone-500">Answers are grounded in the material you&apos;ve uploaded.</p>
           </div>
         )}
         {messages.map((m, i) => {
           if (m.role === "error") {
             return (
               <div key={i} className="flex justify-start">
-                <div className="max-w-lg rounded-2xl px-4 py-2.5 text-sm bg-[#b23a2f]/10 border border-[#b23a2f]/30 text-[#8a2c23]">
+                <div className="max-w-lg rounded-2xl px-4 py-2.5 text-sm bg-[var(--error-bg)] border border-[var(--error-border)] text-[var(--error-text)]">
                   {m.text}
                 </div>
               </div>
@@ -97,13 +97,13 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
               <div
                 className={`max-w-lg rounded-2xl px-4 py-2.5 text-sm ${
-                  m.role === "user" ? "bg-[#FF6D1F] text-[#222222] accent-ring" : "surface text-[#222222]"
+                  m.role === "user" ? "bg-[var(--accent)] text-[var(--accent-ink)] accent-ring" : "surface text-[var(--ink)]"
                 }`}
               >
                 <p className="whitespace-pre-wrap">{m.text}</p>
 
                 {m.role === "assistant" && m.grounded === false && (
-                  <p className="mt-2 text-xs text-[#8a5a0a] bg-[#c9860f]/12 border border-[#c9860f]/25 rounded px-2 py-1">
+                  <p className="mt-2 text-xs text-[var(--warn-text)] bg-[var(--warn-bg)] border border-[var(--warn-border)] rounded px-2 py-1">
                     This answer isn&apos;t grounded in your uploaded material.
                   </p>
                 )}
@@ -113,7 +113,7 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
                     {m.sources.map((s, si) => (
                       <span
                         key={si}
-                        className="text-[11px] text-stone-600 bg-[#222222]/5 border border-[#222222]/10 rounded-full px-2 py-0.5"
+                        className="text-[11px] text-stone-600 dark:text-stone-400 bg-[rgba(var(--ink-rgb),0.05)] border border-[rgba(var(--ink-rgb),0.10)] rounded-full px-2 py-0.5"
                       >
                         {s.source}
                         {s.page != null ? `, p. ${s.page}` : ""}
@@ -123,7 +123,7 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
                 )}
 
                 {m.flagged && m.flagged.length > 0 && (
-                  <p className="mt-2 text-xs text-[#8a5a0a] bg-[#c9860f]/12 border border-[#c9860f]/25 rounded px-2 py-1">
+                  <p className="mt-2 text-xs text-[var(--warn-text)] bg-[var(--warn-bg)] border border-[var(--warn-border)] rounded px-2 py-1">
                     Prerequisite gap: {m.flagged.join(", ")}
                   </p>
                 )}
@@ -133,25 +133,25 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
         })}
         {asking && (
           <div className="flex justify-start">
-            <div className="max-w-lg rounded-2xl px-4 py-2.5 text-sm surface text-stone-500">Thinking...</div>
+            <div className="max-w-lg rounded-2xl px-4 py-2.5 text-sm surface text-stone-500 dark:text-stone-400">Thinking...</div>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      <form onSubmit={handleAsk} className="p-4 border-t border-[#222222]/10">
-        <div className="flex items-center gap-2 rounded-xl linen shadow-sm px-3 py-2 focus-within:border-[#FF6D1F]/50 transition">
+      <form onSubmit={handleAsk} className="p-4 border-t border-[rgba(var(--ink-rgb),0.10)]">
+        <div className="flex items-center gap-2 rounded-xl linen shadow-sm px-3 py-2 focus-within:border-[rgba(var(--accent-rgb),0.50)] transition">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={!topicId || asking}
             placeholder={topicId ? "Ask a question..." : "Select a topic to start"}
-            className="flex-1 bg-transparent text-sm outline-none text-[#222222] placeholder:text-stone-400 disabled:opacity-50"
+            className="flex-1 bg-transparent text-sm outline-none text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={!topicId || asking || !input.trim()}
-            className="rounded-lg bg-[#FF6D1F] hover:bg-[#e6600f] transition text-[#222222] text-xs font-medium px-3.5 py-1.5 disabled:opacity-40"
+            className="rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition text-[var(--accent-ink)] text-xs font-medium px-3.5 py-1.5 disabled:opacity-40"
           >
             {asking ? "..." : "Ask"}
           </button>

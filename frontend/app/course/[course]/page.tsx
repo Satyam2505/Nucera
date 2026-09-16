@@ -58,6 +58,14 @@ const VIEWS: { key: ViewKey; label: string; icon: ReactNode }[] = [
   },
 ];
 
+function ListIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function CourseWorkspace() {
   const params = useParams<{ course: string }>();
   const courseName = decodeURIComponent(params.course);
@@ -65,6 +73,15 @@ export default function CourseWorkspace() {
   const { topics, masteryByTopic, loading, selectedTopicId, setSelectedTopicId } = useAppState();
   const [view, setView] = useState<ViewKey>("chat");
   const [showUpload, setShowUpload] = useState(false);
+  const [topicsOpen, setTopicsOpen] = useState(true);
+
+  // Same reasoning as the landing page's AppSidebar: this 256px topics
+  // column is an overlay below md, so it should default closed there
+  // instead of covering the page on first paint. Done post-mount to avoid
+  // an SSR/client mismatch.
+  useEffect(() => {
+    if (window.innerWidth < 768) setTopicsOpen(false);
+  }, []);
 
   const courseTopics = useMemo(
     () => topics.filter((t) => t.course === courseName),
@@ -80,62 +97,81 @@ export default function CourseWorkspace() {
   const activeTopicId = courseTopics.some((t) => t.id === selectedTopicId) ? selectedTopicId : null;
 
   return (
-    <div className="min-h-screen hero-gradient text-[#222222] flex flex-col">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-[#222222]/10 surface-strong sticky top-0 z-20">
+    <div className="min-h-screen hero-gradient text-[var(--ink)] flex flex-col">
+      <header className="flex items-center justify-between px-6 py-4 border-b border-[rgba(var(--ink-rgb),0.10)] surface-strong sticky top-0 z-20">
         <div className="flex items-center gap-4 min-w-0">
-          <Link href="/" className="text-sm text-stone-500 hover:text-[#222222] transition shrink-0">
+          <button
+            onClick={() => setTopicsOpen((v) => !v)}
+            className="md:hidden p-1.5 -ml-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.08)] transition shrink-0"
+            aria-label={topicsOpen ? "Hide topics" : "Show topics"}
+          >
+            <ListIcon />
+          </button>
+          <Link href="/" className="text-sm text-stone-500 dark:text-stone-400 hover:text-[var(--ink)] transition shrink-0">
             ← Library
           </Link>
-          <h1 className="text-base font-semibold text-[#222222] truncate">{courseName}</h1>
+          <h1 className="text-base font-semibold text-[var(--ink)] truncate">{courseName}</h1>
         </div>
         <button
           onClick={() => setShowUpload(true)}
-          className="text-xs font-medium px-3.5 py-1.5 rounded-full border border-[#FF6D1F]/50 text-[#e6600f] hover:bg-[#FF6D1F]/10 transition shrink-0"
+          className="text-xs font-medium px-3.5 py-1.5 rounded-full border border-[rgba(var(--accent-rgb),0.50)] text-[var(--accent-hover)] hover:bg-[rgba(var(--accent-rgb),0.10)] transition shrink-0"
         >
           + Add source
         </button>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        <aside className="w-64 shrink-0 border-r border-[#222222]/10 surface-deep overflow-y-auto p-3 space-y-1">
-          {loading && <p className="px-3 py-2 text-xs text-stone-500">Loading topics...</p>}
-          {!loading && courseTopics.length === 0 && (
-            <p className="px-3 py-2 text-xs text-stone-500">No topics yet — add a source to get started.</p>
-          )}
-          {courseTopics.map((topic) => {
-            const status = (masteryByTopic[topic.id]?.status ?? "unmastered") as MasteryStatusKey;
-            const active = topic.id === activeTopicId;
-            return (
-              <button
-                key={topic.id}
-                onClick={() => setSelectedTopicId(topic.id)}
-                className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition border ${
-                  active
-                    ? "bg-[#FF6D1F]/12 text-[#e6600f] border-[#FF6D1F]/30"
-                    : "text-stone-600 hover:bg-[#222222]/5 border-transparent"
-                }`}
-              >
-                <span
-                  className="h-1.5 w-1.5 rounded-full shrink-0"
-                  style={{ background: STATUS_COLOR[status] }}
-                  aria-hidden
-                />
-                <span className="truncate">{topic.name}</span>
-              </button>
-            );
-          })}
-        </aside>
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Positioned `absolute` within this already-below-header `relative`
+            row (not `fixed`), so it fills exactly the remaining viewport
+            height without hardcoding the header's pixel height anywhere. */}
+        {topicsOpen && (
+          <div className="absolute inset-0 z-30 bg-black/40 md:hidden" onClick={() => setTopicsOpen(false)} />
+        )}
+
+        {topicsOpen && (
+          <aside className="w-64 max-w-[80vw] shrink-0 border-r border-[rgba(var(--ink-rgb),0.10)] surface-deep overflow-y-auto p-3 space-y-1 absolute inset-y-0 left-0 z-40 md:relative md:inset-auto md:z-auto">
+            {loading && <p className="px-3 py-2 text-xs text-stone-500 dark:text-stone-400">Loading topics...</p>}
+            {!loading && courseTopics.length === 0 && (
+              <p className="px-3 py-2 text-xs text-stone-500 dark:text-stone-400">No topics yet — add a source to get started.</p>
+            )}
+            {courseTopics.map((topic) => {
+              const status = (masteryByTopic[topic.id]?.status ?? "unmastered") as MasteryStatusKey;
+              const active = topic.id === activeTopicId;
+              return (
+                <button
+                  key={topic.id}
+                  onClick={() => {
+                    setSelectedTopicId(topic.id);
+                    if (window.innerWidth < 768) setTopicsOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition border ${
+                    active
+                      ? "bg-[rgba(var(--accent-rgb),0.12)] text-[var(--accent-hover)] border-[rgba(var(--accent-rgb),0.30)]"
+                      : "text-stone-600 dark:text-stone-400 hover:bg-[rgba(var(--ink-rgb),0.05)] border-transparent"
+                  }`}
+                >
+                  <span
+                    className="h-1.5 w-1.5 rounded-full shrink-0"
+                    style={{ background: STATUS_COLOR[status] }}
+                    aria-hidden
+                  />
+                  <span className="truncate">{topic.name}</span>
+                </button>
+              );
+            })}
+          </aside>
+        )}
 
         <main className="flex-1 flex flex-col min-w-0">
-          <div className="flex items-center gap-2 px-6 py-3 border-b border-[#222222]/10 overflow-x-auto">
+          <div className="flex items-center gap-2 px-6 py-3 border-b border-[rgba(var(--ink-rgb),0.10)] overflow-x-auto">
             {VIEWS.map((v) => (
               <button
                 key={v.key}
                 onClick={() => setView(v.key)}
                 className={`flex items-center gap-1.5 text-xs font-medium px-3.5 py-2 rounded-full transition shrink-0 ${
                   view === v.key
-                    ? "bg-[#FF6D1F] text-[#222222] accent-ring"
-                    : "text-stone-600 hover:text-[#222222] hover:bg-[#222222]/5"
+                    ? "bg-[var(--accent)] text-[var(--accent-ink)] accent-ring"
+                    : "text-stone-600 dark:text-stone-400 hover:text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.05)]"
                 }`}
               >
                 {v.icon}

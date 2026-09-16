@@ -2,13 +2,124 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Smooths the light/dark switch across every element that repaints via a
+   CSS variable — zero specificity so any element with Tailwind's own
+   `transition` utility (which already covers these properties) keeps
+   using that instead of this one. Colors/borders/shadows only: no
+   transform or layout properties, so this never fights page transitions
+   or costs a reflow. */
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+  transition-duration: 180ms;
+  transition-timing-function: ease-out;
+}
+
 :root {
   color-scheme: light;
+
+  --bg-page: #e6d8c1;
+  --bg-sidebar: #dbcbaf;
+  --bg-surface: #faf3e1;
+  --bg-linen: #fdf8ec;
+
+  --ink: #222222;
+  --ink-rgb: 34, 34, 34;
+
+  --accent: #ff6d1f;
+  --accent-rgb: 255, 109, 31;
+  --accent-hover: #e6600f;
+  --accent-ink: #222222;
+
+  --status-mastered: #3f7d3a;
+  --status-in-progress: #c9860f;
+  --status-unmastered: #857f6b;
+  --status-missed: #b23a2f;
+  --status-mastered-fill: rgba(63, 125, 58, 0.14);
+  --status-in-progress-fill: rgba(201, 134, 15, 0.16);
+  --status-unmastered-fill: rgba(34, 34, 34, 0.07);
+  --status-missed-fill: rgba(178, 58, 47, 0.14);
+
+  --error-text: #8a2c23;
+  --error-bg: rgba(178, 58, 47, 0.1);
+  --error-border: rgba(178, 58, 47, 0.3);
+  --warn-text: #8a5a0a;
+  --warn-bg: rgba(201, 134, 15, 0.12);
+  --warn-border: rgba(201, 134, 15, 0.25);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-page: #1c1815;
+  --bg-sidebar: #141110;
+  --bg-surface: #262019;
+  --bg-linen: #302921;
+
+  --ink: #ede6d9;
+  --ink-rgb: 237, 230, 217;
+
+  --accent: #ff6d1f;
+  --accent-rgb: 255, 109, 31;
+  --accent-hover: #ff7a33;
+  --accent-ink: #201a14;
+
+  --status-mastered: #6fcb66;
+  --status-in-progress: #e2a93b;
+  --status-unmastered: #9c9686;
+  --status-missed: #e2685c;
+  --status-mastered-fill: rgba(111, 203, 102, 0.16);
+  --status-in-progress-fill: rgba(226, 169, 59, 0.18);
+  --status-unmastered-fill: rgba(237, 230, 217, 0.08);
+  --status-missed-fill: rgba(226, 104, 92, 0.16);
+
+  --error-text: #ff9187;
+  --error-bg: rgba(226, 104, 92, 0.14);
+  --error-border: rgba(226, 104, 92, 0.35);
+  --warn-text: #f0c36b;
+  --warn-bg: rgba(226, 169, 59, 0.14);
+  --warn-border: rgba(226, 169, 59, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg-page: #1c1815;
+    --bg-sidebar: #141110;
+    --bg-surface: #262019;
+    --bg-linen: #302921;
+
+    --ink: #ede6d9;
+    --ink-rgb: 237, 230, 217;
+
+    --accent: #ff6d1f;
+    --accent-rgb: 255, 109, 31;
+    --accent-hover: #ff7a33;
+    --accent-ink: #201a14;
+
+    --status-mastered: #6fcb66;
+    --status-in-progress: #e2a93b;
+    --status-unmastered: #9c9686;
+    --status-missed: #e2685c;
+    --status-mastered-fill: rgba(111, 203, 102, 0.16);
+    --status-in-progress-fill: rgba(226, 169, 59, 0.18);
+    --status-unmastered-fill: rgba(237, 230, 217, 0.08);
+    --status-missed-fill: rgba(226, 104, 92, 0.16);
+
+    --error-text: #ff9187;
+    --error-bg: rgba(226, 104, 92, 0.14);
+    --error-border: rgba(226, 104, 92, 0.35);
+    --warn-text: #f0c36b;
+    --warn-bg: rgba(226, 169, 59, 0.14);
+    --warn-border: rgba(226, 169, 59, 0.3);
+  }
 }
 
 html,
 body {
-  background-color: #e6d8c1;
+  background-color: var(--bg-page);
 }
 
 ::selection {
@@ -17,14 +128,14 @@ body {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(34, 34, 34, 0.22) transparent;
+  scrollbar-color: rgba(var(--ink-rgb), 0.22) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(34, 34, 34, 0.18);
+  background: rgba(var(--ink-rgb), 0.18);
   border-radius: 999px;
 }
 *::-webkit-scrollbar-track {
@@ -32,43 +143,43 @@ body {
 }
 
 /* Cream-toned cards, modals, chat bubbles — sits above the page tint,
-   below the linen inputs. Nothing in the ladder is ever pure white. */
+   below the linen inputs. Nothing in the ladder is ever pure white
+   (or pure black in dark mode). */
 .surface {
-  background: #faf3e1;
-  border: 1px solid rgba(34, 34, 34, 0.09);
+  background: var(--bg-surface);
+  border: 1px solid rgba(var(--ink-rgb), 0.09);
 }
 
 .surface-strong {
-  background: #faf3e1;
-  border: 1px solid rgba(34, 34, 34, 0.12);
-  box-shadow: 0 16px 40px -16px rgba(34, 34, 34, 0.22);
+  background: var(--bg-surface);
+  border: 1px solid rgba(var(--ink-rgb), 0.12);
+  box-shadow: 0 16px 40px -16px rgba(0, 0, 0, 0.35);
 }
 
-/* Deepest cream — sidebar/panel zoning, hover states, subtle bands.
+/* Deepest step — sidebar/panel zoning, hover states, subtle bands.
    Sits *below* the page tone so panels read as recessed. */
 .surface-deep {
-  background: #dbcbaf;
+  background: var(--bg-sidebar);
 }
 
 /* Linen — for actual input fields (search bar, chat input, form fields).
-   The brightest step so inputs read as interactive, but still warm cream,
-   never stark #fff. */
+   The brightest step so inputs read as interactive. */
 .linen {
-  background: #fdf8ec;
-  border: 1px solid rgba(34, 34, 34, 0.1);
+  background: var(--bg-linen);
+  border: 1px solid rgba(var(--ink-rgb), 0.1);
 }
 
 .accent-ring {
   box-shadow:
-    0 0 0 1px rgba(255, 109, 31, 0.5),
-    0 6px 18px -8px rgba(255, 109, 31, 0.45);
+    0 0 0 1px rgba(var(--accent-rgb), 0.5),
+    0 6px 18px -8px rgba(var(--accent-rgb), 0.45);
 }
 
 .hero-gradient {
   background:
     radial-gradient(50% 40% at 28% 0%, rgba(255, 109, 31, 0.11), transparent 70%),
     radial-gradient(45% 35% at 88% 8%, rgba(60, 91, 122, 0.09), transparent 70%),
-    #e6d8c1;
+    var(--bg-page);
 }
 
 .sheen {
@@ -86,4 +197,25 @@ body {
 }
 .sheen:hover::before {
   transform: translateX(120%);
+}
+
+/* React Flow ships its own light-mode chrome (zoom controls, attribution)
+   via a stylesheet imported inside the component, which can land after
+   this file in the build and win the cascade at equal specificity. The
+   doubled-up selectors below out-specify it so our tokens always apply,
+   in both themes, regardless of import order. */
+.react-flow .react-flow__controls {
+  box-shadow: none;
+}
+.react-flow .react-flow__controls-button {
+  background: var(--bg-surface);
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.1);
+  fill: var(--ink);
+}
+.react-flow .react-flow__controls-button:hover {
+  background: rgba(var(--ink-rgb), 0.08);
+}
+.react-flow .react-flow__attribution {
+  background: transparent;
+  color: rgba(var(--ink-rgb), 0.4);
 }
