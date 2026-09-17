@@ -7,7 +7,9 @@ app = FastAPI(title="EduPilot AI", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    # 3002 covers local dev when 3000 is already taken by another project
+    # on the same machine (Next.js auto-picks the next free port).
+    allow_origins=["http://localhost:3000", "http://localhost:3002"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
