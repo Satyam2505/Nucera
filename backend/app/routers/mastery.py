@@ -46,6 +46,18 @@ def update_mastery(
     return mastery
 
 
+@router.post("/mastery/{topic_id}/toggle-revision", response_model=schemas.MasteryOut)
+def toggle_revision(topic_id: int, db: Session = Depends(get_db)):
+    mastery = db.get(models.Mastery, topic_id)
+    if not mastery:
+        raise HTTPException(status_code=404, detail="Mastery record not found")
+
+    mastery.flagged_for_revision = not mastery.flagged_for_revision
+    db.commit()
+    db.refresh(mastery)
+    return mastery
+
+
 @router.post("/mastery/{topic_id}/missed", response_model=schemas.MasteryOut)
 def mark_missed(topic_id: int, db: Session = Depends(get_db)):
     mastery = db.get(models.Mastery, topic_id)

@@ -39,6 +39,7 @@ export interface Mastery {
   score: number;
   status: "unmastered" | "in_progress" | "mastered" | "missed";
   last_updated: string;
+  flagged_for_revision: boolean;
 }
 
 export interface GraphNode {
@@ -123,6 +124,8 @@ export const api = {
   listMastery: () => request<Mastery[]>("/mastery"),
   markMissed: (topicId: number) =>
     request<Mastery>(`/mastery/${topicId}/missed`, { method: "POST" }),
+  toggleRevision: (topicId: number) =>
+    request<Mastery>(`/mastery/${topicId}/toggle-revision`, { method: "POST" }),
   updateMastery: (topicId: number, payload: Partial<Pick<Mastery, "score" | "status">>) =>
     request<Mastery>(`/mastery/${topicId}`, {
       method: "PUT",

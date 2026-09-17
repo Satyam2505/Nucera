@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
 import { useAuth } from "@/lib/AuthContext";
 
 function ChevronIcon() {
@@ -12,70 +20,42 @@ function ChevronIcon() {
   );
 }
 
-export default function AccountMenu({ collapsed }: { collapsed: boolean }) {
+export default function AccountMenu() {
   // AccountMenu only ever renders inside AuthGate's authenticated branch,
   // so `user` is guaranteed non-null here.
   const { user, logout } = useAuth();
-  const [open, setOpen] = useState(false);
+  const { state } = useSidebar();
+  const collapsed = state === "collapsed";
 
   const initial = user?.email.charAt(0).toUpperCase() ?? "?";
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
   return (
-    <div className="relative border-t border-[rgba(var(--ink-rgb),0.10)] p-2">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className={`w-full flex items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-[rgba(var(--ink-rgb),0.08)] transition ${
-          collapsed ? "justify-center" : "text-left"
-        }`}
-      >
-        <span className="h-8 w-8 rounded-full bg-[rgba(var(--accent-rgb),0.2)] border border-[rgba(var(--accent-rgb),0.4)] flex items-center justify-center text-xs font-semibold text-[var(--accent-hover)] shrink-0">
-          {initial}
-        </span>
-        {!collapsed && (
-          <>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium text-[var(--ink)] truncate">{user?.email}</span>
-              <span className="block text-[11px] text-stone-500 dark:text-stone-400 truncate">Signed in</span>
-            </span>
-            <span className="text-stone-500 dark:text-stone-400 shrink-0">
-              <ChevronIcon />
-            </span>
-          </>
-        )}
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div
-            className={`absolute z-40 bottom-full mb-2 surface-strong rounded-xl overflow-hidden py-1 ${
-              collapsed ? "left-2 w-48" : "left-2 right-2"
-            }`}
-          >
-            <div className="px-3 py-2 border-b border-[rgba(var(--ink-rgb),0.10)]">
-              <p className="text-sm font-medium text-[var(--ink)] truncate">{user?.email}</p>
-            </div>
-            <button
-              onClick={() => {
-                logout();
-                setOpen(false);
-              }}
-              className="w-full text-left px-3 py-2 text-sm text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.06)] transition"
-            >
-              Log out
-            </button>
-          </div>
-        </>
-      )}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <SidebarMenuButton
+          size="lg"
+          tooltip={collapsed ? user?.email : undefined}
+          className="data-[state=open]:bg-sidebar-accent"
+        >
+          <Avatar className="h-8 w-8 rounded-full border border-[rgba(var(--accent-rgb),0.4)]">
+            <AvatarFallback className="rounded-full bg-[rgba(var(--accent-rgb),0.2)] text-[var(--accent-hover)] text-xs font-semibold">
+              {initial}
+            </AvatarFallback>
+          </Avatar>
+          <span className="min-w-0 flex-1 text-left">
+            <span className="block text-sm font-medium text-sidebar-foreground truncate">{user?.email}</span>
+            <span className="block text-[11px] text-sidebar-foreground/70 truncate">Signed in</span>
+          </span>
+          <span className="text-sidebar-foreground/70 shrink-0">
+            <ChevronIcon />
+          </span>
+        </SidebarMenuButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="w-64">
+        <DropdownMenuLabel className="truncate font-normal text-[var(--ink)]">{user?.email}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => logout()}>Log out</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

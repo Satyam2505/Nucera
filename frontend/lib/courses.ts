@@ -29,10 +29,13 @@ export function summarizeCourses(
 // Cycled by a stable hash of the course name so the same course always
 // lands on the same color, and a library of several courses reads as
 // varied rather than a wall of one accent.
+// Light pastel chip + dark saturated text (self-contained contrast) rather
+// than a dark translucent tint — these badges sit on the dark navy
+// sidebar, where a dark-on-dark chip would just wash out.
 const BADGE_PALETTE = [
-  { bg: "rgba(255, 109, 31, 0.15)", border: "rgba(255, 109, 31, 0.35)", text: "#e6600f" },
-  { bg: "rgba(60, 91, 122, 0.15)", border: "rgba(60, 91, 122, 0.35)", text: "#3c5b7a" },
-  { bg: "rgba(139, 94, 60, 0.15)", border: "rgba(139, 94, 60, 0.35)", text: "#8b5e3c" },
+  { bg: "rgba(203, 208, 224, 0.9)", border: "rgba(203, 208, 224, 1)", text: "#2d3348" },
+  { bg: "rgba(147, 181, 219, 0.9)", border: "rgba(147, 181, 219, 1)", text: "#1e3a5f" },
+  { bg: "rgba(214, 178, 145, 0.9)", border: "rgba(214, 178, 145, 1)", text: "#5c3d1f" },
 ];
 
 export function badgeColorFor(name: string) {

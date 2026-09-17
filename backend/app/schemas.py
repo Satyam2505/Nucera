@@ -82,6 +82,7 @@ class MasteryOut(BaseModel):
     score: int
     last_updated: datetime
     status: MasteryStatus
+    flagged_for_revision: bool
 
 
 class MasteryUpdate(BaseModel):

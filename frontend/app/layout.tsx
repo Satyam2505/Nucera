@@ -2,6 +2,7 @@ import "./globals.css";
 import type { ReactNode } from "react";
 
 import AuthGate from "@/components/AuthGate";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/AuthContext";
 
 export const metadata = {
@@ -22,7 +23,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body className="h-full bg-[var(--bg-page)] text-[var(--ink)] antialiased">
         <AuthProvider>
-          <AuthGate>{children}</AuthGate>
+          <TooltipProvider>
+            <AuthGate>{children}</AuthGate>
+          </TooltipProvider>
         </AuthProvider>
       </body>
     </html>

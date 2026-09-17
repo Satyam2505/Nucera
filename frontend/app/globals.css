@@ -25,18 +25,18 @@
 :root {
   color-scheme: light;
 
-  --bg-page: #e6d8c1;
-  --bg-sidebar: #dbcbaf;
-  --bg-surface: #faf3e1;
-  --bg-linen: #fdf8ec;
+  --bg-page: #f5f6fa;
+  --bg-sidebar: #1a1f3a;
+  --bg-surface: #ffffff;
+  --bg-linen: #ffffff;
 
-  --ink: #222222;
-  --ink-rgb: 34, 34, 34;
+  --ink: #1a1d29;
+  --ink-rgb: 26, 29, 41;
 
-  --accent: #ff6d1f;
-  --accent-rgb: 255, 109, 31;
-  --accent-hover: #e6600f;
-  --accent-ink: #222222;
+  --accent: #4f6ef7;
+  --accent-rgb: 79, 110, 247;
+  --accent-hover: #3b57e0;
+  --accent-ink: #ffffff;
 
   --status-mastered: #3f7d3a;
   --status-in-progress: #c9860f;
@@ -71,9 +71,13 @@
   --popover-foreground: var(--ink);
   --primary: var(--accent);
   --primary-foreground: var(--accent-ink);
-  --secondary: var(--bg-sidebar);
+  /* --bg-sidebar is now specifically "dark nav rail", not a generic
+     recessed tone, so secondary/muted (used on the light main content,
+     e.g. a secondary button or badge) get their own light neutral gray
+     instead of aliasing it. */
+  --secondary: #eef0f5;
   --secondary-foreground: var(--ink);
-  --muted: var(--bg-sidebar);
+  --muted: #eef0f5;
   --muted-foreground: var(--status-unmastered);
   --shadcn-accent-bg: rgba(var(--ink-rgb), 0.08);
   --shadcn-accent-fg: var(--ink);
@@ -83,6 +87,18 @@
   --input: rgba(var(--ink-rgb), 0.12);
   --ring: var(--accent);
   --radius: 0.75rem;
+
+  /* shadcn's Sidebar block reads its own dedicated set of vars rather
+     than the generic ones above. --bg-sidebar is a dark navy rail in both
+     themes now, so its foreground/hover/border are light-on-dark and
+     don't need to differ between light and dark mode the way everything
+     else does — declared once here, not repeated in the dark block. */
+  --sidebar: var(--bg-sidebar);
+  --sidebar-foreground: #e8eaf2;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.12);
+  --sidebar-ring: var(--accent);
 }
 
 :root[data-theme="dark"] {
@@ -116,6 +132,11 @@
   --warn-text: #f0c36b;
   --warn-bg: rgba(226, 169, 59, 0.14);
   --warn-border: rgba(226, 169, 59, 0.3);
+
+  /* Unlike light mode, dark mode's secondary/muted still read fine as a
+     recessed dark tone, so these keep aliasing bg-sidebar here. */
+  --secondary: var(--bg-sidebar);
+  --muted: var(--bg-sidebar);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -150,6 +171,9 @@
     --warn-text: #f0c36b;
     --warn-bg: rgba(226, 169, 59, 0.14);
     --warn-border: rgba(226, 169, 59, 0.3);
+
+    --secondary: var(--bg-sidebar);
+    --muted: var(--bg-sidebar);
   }
 }
 
@@ -180,6 +204,13 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 }
 
 @layer base {

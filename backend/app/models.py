@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     Column,
     DateTime,
     ForeignKey,
@@ -146,6 +147,7 @@ class Mastery(Base):
     )
     score = Column(Integer, default=0, nullable=False)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    flagged_for_revision = Column(Boolean, default=False, nullable=False)
     status = Column(
         SQLEnum(MasteryStatus, name="mastery_status"),
         default=MasteryStatus.unmastered,

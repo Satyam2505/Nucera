@@ -10,8 +10,24 @@ import MasteryView from "@/components/course/MasteryView";
 import QuizView from "@/components/course/QuizView";
 import SourcesView from "@/components/course/SourcesView";
 import UploadModal from "@/components/UploadModal";
+import { api } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
 import { STATUS_COLOR, type MasteryStatusKey } from "@/lib/status-colors";
+
+function BookmarkIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path d="M19 21 12 16 5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 type ViewKey = "chat" | "quiz" | "graph" | "mastery" | "sources";
 
@@ -81,7 +97,7 @@ export default function CourseWorkspace() {
   const params = useParams<{ course: string }>();
   const courseName = decodeURIComponent(params.course);
 
-  const { topics, masteryByTopic, loading, selectedTopicId, setSelectedTopicId } = useAppState();
+  const { topics, masteryByTopic, loading, selectedTopicId, setSelectedTopicId, refresh } = useAppState();
   const [view, setView] = useState<ViewKey>("chat");
   const [showUpload, setShowUpload] = useState(false);
   const [topicsOpen, setTopicsOpen] = useState(true);
@@ -144,34 +160,51 @@ export default function CourseWorkspace() {
         )}
 
         {topicsOpen && (
-          <aside className="w-64 max-w-[80vw] shrink-0 border-r border-[rgba(var(--ink-rgb),0.10)] surface-deep overflow-y-auto p-3 space-y-1 absolute inset-y-0 left-0 z-40 md:relative md:inset-auto md:z-auto">
-            {loading && <p className="px-3 py-2 text-xs text-stone-500 dark:text-stone-400">Loading topics...</p>}
+          <aside className="w-64 max-w-[80vw] shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground overflow-y-auto p-3 space-y-1 absolute inset-y-0 left-0 z-40 md:relative md:inset-auto md:z-auto">
+            {loading && <p className="px-3 py-2 text-xs text-sidebar-foreground/70">Loading topics...</p>}
             {!loading && courseTopics.length === 0 && (
-              <p className="px-3 py-2 text-xs text-stone-500 dark:text-stone-400">No topics yet — add a source to get started.</p>
+              <p className="px-3 py-2 text-xs text-sidebar-foreground/70">No topics yet — add a source to get started.</p>
             )}
             {courseTopics.map((topic) => {
               const status = (masteryByTopic[topic.id]?.status ?? "unmastered") as MasteryStatusKey;
               const active = topic.id === activeTopicId;
+              const flagged = masteryByTopic[topic.id]?.flagged_for_revision ?? false;
               return (
-                <button
-                  key={topic.id}
-                  onClick={() => {
-                    setSelectedTopicId(topic.id);
-                    if (window.innerWidth < 768) setTopicsOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition border ${
-                    active
-                      ? "bg-[rgba(var(--accent-rgb),0.12)] text-[var(--accent-hover)] border-[rgba(var(--accent-rgb),0.30)]"
-                      : "text-stone-600 dark:text-stone-400 hover:bg-[rgba(var(--ink-rgb),0.05)] border-transparent"
-                  }`}
-                >
-                  <span
-                    className="h-1.5 w-1.5 rounded-full shrink-0"
-                    style={{ background: STATUS_COLOR[status] }}
-                    aria-hidden
-                  />
-                  <span className="truncate">{topic.name}</span>
-                </button>
+                <div key={topic.id} className="flex items-center gap-1 group">
+                  <button
+                    onClick={() => {
+                      setSelectedTopicId(topic.id);
+                      if (window.innerWidth < 768) setTopicsOpen(false);
+                    }}
+                    className={`flex-1 min-w-0 flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition border ${
+                      active
+                        ? "bg-[rgba(var(--accent-rgb),0.18)] text-white border-[rgba(var(--accent-rgb),0.4)]"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border-transparent"
+                    }`}
+                  >
+                    <span
+                      className="h-1.5 w-1.5 rounded-full shrink-0"
+                      style={{ background: STATUS_COLOR[status] }}
+                      aria-hidden
+                    />
+                    <span className="truncate">{topic.name}</span>
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await api.toggleRevision(topic.id);
+                      refresh();
+                    }}
+                    className={`shrink-0 p-1.5 rounded-lg transition ${
+                      flagged
+                        ? "text-[var(--accent)] opacity-100"
+                        : "text-sidebar-foreground/40 opacity-0 group-hover:opacity-100 hover:text-sidebar-foreground/80"
+                    }`}
+                    aria-label={flagged ? "Remove from revision list" : "Add to revision list"}
+                    title={flagged ? "Remove from revision list" : "Add to revision list"}
+                  >
+                    <BookmarkIcon filled={flagged} />
+                  </button>
+                </div>
               );
             })}
           </aside>
