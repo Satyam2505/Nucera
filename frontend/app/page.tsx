@@ -7,10 +7,15 @@ import AppSidebar from "@/components/AppSidebar";
 import CreateCourseModal from "@/components/CreateCourseModal";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useAppState } from "@/lib/AppStateContext";
+import { useAuth } from "@/lib/AuthContext";
 import { summarizeCourses } from "@/lib/courses";
+import { getGreeting, getTimePeriod } from "@/lib/greeting";
+import { useDynamicGreeting } from "@/lib/useDynamicGreeting";
+import { getWelcomeContext } from "@/lib/welcomeContext";
 
 function BookmarkIcon({ filled }: { filled: boolean }) {
   return (
@@ -28,10 +33,15 @@ function BookmarkIcon({ filled }: { filled: boolean }) {
 }
 
 export default function LandingPage() {
-  const { topics, masteryByTopic, loading, refresh } = useAppState();
+  const { topics, masteryByTopic, graph, loading, refresh } = useAppState();
+  const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const now = useDynamicGreeting();
+  const period = useMemo(() => getTimePeriod(now), [now]);
+  const greeting = useMemo(() => getGreeting(now, user?.name), [now, user?.name]);
 
   // Server-rendered state always starts expanded (matches desktop) — on a
   // narrow window the sidebar is an overlay (Sidebar's own mobile mode), so
@@ -45,6 +55,11 @@ export default function LandingPage() {
   const filtered = query
     ? courses.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()))
     : courses;
+
+  const welcome = useMemo(
+    () => getWelcomeContext(period, topics, masteryByTopic, graph, courses),
+    [period, topics, masteryByTopic, graph, courses]
+  );
 
   const masteredCount = topics.filter((t) => masteryByTopic[t.id]?.status === "mastered").length;
 
@@ -84,9 +99,28 @@ export default function LandingPage() {
 
       <SidebarInset className="hero-gradient min-w-0 overflow-y-auto">
         <div className="min-h-full flex flex-col items-center px-6 py-16 gap-8">
-          <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-[var(--ink)] text-center">
-            Welcome back!
-          </h1>
+          <div className="flex flex-col items-center gap-3 text-center">
+            <h1
+              key={greeting}
+              className="font-brand animate-in fade-in-0 duration-200 text-4xl sm:text-5xl font-semibold tracking-tight text-[var(--ink)]"
+            >
+              {greeting}
+            </h1>
+            <p
+              key={welcome.message}
+              className="animate-in fade-in-0 duration-200 text-base text-stone-500 dark:text-stone-400 max-w-md"
+            >
+              {welcome.message}
+            </p>
+            {welcome.cta && (
+              <Button asChild size="sm" className="mt-1">
+                <Link href={welcome.cta.href}>{welcome.cta.label}</Link>
+              </Button>
+            )}
+            {welcome.contextLine && (
+              <p className="text-xs text-stone-400 dark:text-stone-500">{welcome.contextLine}</p>
+            )}
+          </div>
 
           <div className="w-full max-w-3xl grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card className="bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">

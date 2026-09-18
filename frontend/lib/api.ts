@@ -24,6 +24,10 @@ export interface User {
   id: number;
   email: string;
   created_at: string;
+  // Not returned by the backend yet — optional so the landing page's
+  // greeting can use a first name the moment auth adds one, with no
+  // further wiring needed.
+  name?: string;
 }
 
 export interface Topic {
