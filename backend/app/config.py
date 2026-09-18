@@ -4,9 +4,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql+psycopg2://postgres:postgres@localhost:5432/edupilot"
-)
+# SQLite by default — this is a personal, solo-use local app (see README),
+# so it needs no server/Docker/install. Override with a real Postgres URL
+# via the DATABASE_URL env var if you want that instead.
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
 
 # Local LLM (Ollama) — no cloud calls, no paid APIs. Model name is
 # configurable so a different local model can be swapped in without code
