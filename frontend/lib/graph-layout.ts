@@ -81,41 +81,13 @@ export function computeDefaultPositions(nodes: LayoutNode[], edges: LayoutEdge[]
   return positions;
 }
 
-/**
- * Gentle alignment assist while dragging: if the dragged card is within
- * `tolerance` (flow units) of another card's left edge or top edge, pull it
- * onto that line. Each axis snaps independently and only within the small
- * tolerance, so movement stays free-form.
- */
-export function snapToNeighbors(
-  id: number,
-  position: Position,
-  others: { id: number; position: Position }[],
-  tolerance: number
-): Position {
-  let x = position.x;
-  let y = position.y;
-  let bestX = tolerance;
-  let bestY = tolerance;
-  for (const other of others) {
-    if (other.id === id) continue;
-    const dx = Math.abs(position.x - other.position.x);
-    if (dx < bestX) {
-      bestX = dx;
-      x = other.position.x;
-    }
-    const dy = Math.abs(position.y - other.position.y);
-    if (dy < bestY) {
-      bestY = dy;
-      y = other.position.y;
-    }
-  }
-  return { x, y };
-}
-
 // --- Persistence (localStorage, per course) ---------------------------------
+// Node positions and the camera (pan + zoom) are stored under separate
+// Nucera-named keys so either can be cleared or invalid without affecting
+// the other.
 
 const KEY_PREFIX = "nucera:graph-layout:";
+const VIEWPORT_KEY_PREFIX = "nucera:graph-viewport:";
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -173,6 +145,61 @@ export function clearLayout(course: string, storage: StorageLike | null = defaul
   if (!storage) return;
   try {
     storage.removeItem(keyFor(course));
+  } catch {
+    // ignore
+  }
+}
+
+// --- Viewport (camera) persistence ---------------------------------------------
+
+export interface SavedViewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+/** Saved camera for a course, or null when none / unreadable / corrupt. */
+export function loadViewport(course: string, storage: StorageLike | null = defaultStorage()): SavedViewport | null {
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(`${VIEWPORT_KEY_PREFIX}${course}`);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as { x?: unknown; y?: unknown; zoom?: unknown } | null;
+    if (
+      v &&
+      typeof v.x === "number" &&
+      typeof v.y === "number" &&
+      typeof v.zoom === "number" &&
+      Number.isFinite(v.x) &&
+      Number.isFinite(v.y) &&
+      Number.isFinite(v.zoom) &&
+      v.zoom > 0
+    ) {
+      return { x: v.x, y: v.y, zoom: v.zoom };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveViewport(course: string, viewport: SavedViewport, storage: StorageLike | null = defaultStorage()): void {
+  if (!storage) return;
+  try {
+    const r = (n: number) => Math.round(n * 100) / 100;
+    storage.setItem(
+      `${VIEWPORT_KEY_PREFIX}${course}`,
+      JSON.stringify({ x: r(viewport.x), y: r(viewport.y), zoom: Math.round(viewport.zoom * 1000) / 1000 })
+    );
+  } catch {
+    // Quota exceeded / storage blocked: the camera just won't persist.
+  }
+}
+
+export function clearViewport(course: string, storage: StorageLike | null = defaultStorage()): void {
+  if (!storage) return;
+  try {
+    storage.removeItem(`${VIEWPORT_KEY_PREFIX}${course}`);
   } catch {
     // ignore
   }

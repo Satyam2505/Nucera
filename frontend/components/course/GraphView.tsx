@@ -1,16 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { Check } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import ReactFlow, {
   applyNodeChanges,
   Background,
-  Controls,
   MiniMap,
+  Panel,
   ReactFlowProvider,
   useReactFlow,
+  useStoreApi,
   type Edge,
   type Node,
   type NodeChange,
+  type Viewport,
 } from "reactflow";
 import "reactflow/dist/style.css";
 
@@ -19,13 +22,16 @@ import type { GraphData } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
 import {
   clearLayout,
+  clearViewport,
   computeDefaultPositions,
   loadLayout,
+  loadViewport,
   NODE_HEIGHT,
   NODE_WIDTH,
   saveLayout,
-  snapToNeighbors,
+  saveViewport,
   type Positions,
+  type SavedViewport,
 } from "@/lib/graph-layout";
 import {
   ancestors,
@@ -37,16 +43,17 @@ import {
   neighborhood,
   type PathState,
 } from "@/lib/graph-model";
+import { anyRectVisible, clampZoom, rectFits, revealDelta, unionRects, type Rect } from "@/lib/graph-viewport";
 import { STATUS_COLOR, STATUS_LABEL, type MasteryStatusKey } from "@/lib/status-colors";
 
 import { GraphUiContext, type GraphUi } from "./graph/graph-context";
+import GraphZoomControls from "./graph/GraphZoomControls";
 import { normalizeStatus, PATH_LABEL, PathIcon, StatusIcon } from "./graph/graph-icons";
 import PrerequisiteEdge, { GraphMarkers, type PrerequisiteEdgeData } from "./graph/PrerequisiteEdge";
 import TopicDetailPanel, { type PanelTopic } from "./graph/TopicDetailPanel";
 import TopicNode, { type TopicNodeData } from "./graph/TopicNode";
 
-// Defined once at module scope so React Flow doesn't see new type objects
-// on every render.
+// Defined once at module scope so React Flow sees stable type objects.
 const nodeTypes = { topic: TopicNode };
 const edgeTypes = { prerequisite: PrerequisiteEdge };
 
@@ -54,10 +61,29 @@ const LEGEND_ORDER: MasteryStatusKey[] = ["mastered", "in_progress", "unmastered
 const PATH_ORDER: PathState[] = ["covered", "attention", "next", "later"];
 
 const MINIMAP_THRESHOLD = 12;
-const SNAP_SCREEN_PX = 6;
+
+// Zoom bounds. At 25% the whole structure of a large course (60+ topics)
+// still fits the canvas; at 175% a 190px card is ~330px wide — comfortably
+// readable without becoming absurd.
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 1.75;
+const ZOOM_STEP = 0.15;
 const FIT_OPTIONS = { padding: 0.08, maxZoom: 1.1 } as const;
+// One duration for every programmatic camera move (fit, focus, reset, zoom
+// buttons, revealing a selected topic) so the graph feels consistent.
+const ANIM_MS = 320;
+const REVEAL_MARGIN = 24;
 
 export type GraphOpenView = "chat" | "quiz";
+
+// What a programmatic camera move means for persistence:
+//  - "default":   back to the default (fitted) view — forget any saved camera
+//  - "persist":   a deliberate zoom worth restoring after a refresh
+//  - "transient": a helper move (focus, keeping a topic visible) — not saved
+// React Flow only reports moves the user makes (drag-pan, pinch) through
+// onMoveEnd; programmatic ones (fitView, zoomTo, setViewport) never do, so
+// we settle those ourselves once their animation has finished.
+type MoveIntent = "default" | "persist" | "transient";
 
 interface Props {
   courseName: string;
@@ -92,6 +118,12 @@ function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+function nodeRect(n: Node, vp: Viewport): Rect {
+  const left = n.position.x * vp.zoom + vp.x;
+  const top = n.position.y * vp.zoom + vp.y;
+  return { left, top, right: left + NODE_WIDTH * vp.zoom, bottom: top + NODE_HEIGHT * vp.zoom };
+}
+
 function toNodes(
   data: GraphData,
   positions: Positions,
@@ -109,8 +141,23 @@ function toNodes(
   });
 }
 
-function GraphCanvas({ courseName, data, onOpenTopic }: { courseName: string; data: GraphData; onOpenTopic?: Props["onOpenTopic"] }) {
-  const { fitView, setCenter, getZoom } = useReactFlow();
+function GraphCanvas({
+  courseName,
+  data,
+  onOpenTopic,
+}: {
+  courseName: string;
+  data: GraphData;
+  onOpenTopic?: Props["onOpenTopic"];
+}) {
+  const flow = useReactFlow();
+  const { fitView, setViewport, getViewport } = flow;
+  // React Flow hands out placeholder helpers (fitView() === false) until its
+  // viewport is initialized, so anything running from a stale closure must
+  // read the latest instance through this ref.
+  const flowRef = useRef(flow);
+  flowRef.current = flow;
+  const storeApi = useStoreApi();
 
   // --- visual state (separate from academic data) ---------------------------
   const [nodes, setNodes] = useState<Node<TopicNodeData>[]>(() => {
@@ -120,7 +167,12 @@ function GraphCanvas({ courseName, data, onOpenTopic }: { courseName: string; da
     for (const n of data.nodes) merged[n.id] = saved?.[n.id] ?? defaults[n.id];
     return toNodes(data, merged);
   });
+  const [initialViewport] = useState<SavedViewport | null>(() => {
+    const saved = loadViewport(courseName);
+    return saved ? { ...saved, zoom: clampZoom(saved.zoom, MIN_ZOOM, MAX_ZOOM) } : null;
+  });
   const [customized, setCustomized] = useState(() => loadLayout(courseName) !== null);
+  const [viewportSaved, setViewportSaved] = useState(initialViewport !== null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [focusId, setFocusId] = useState<number | null>(null);
@@ -132,6 +184,7 @@ function GraphCanvas({ courseName, data, onOpenTopic }: { courseName: string; da
   const draggingRef = useRef(false);
   const movedRef = useRef(false);
   const suppressClickRef = useRef(false);
+  const settleTimerRef = useRef<number | undefined>(undefined);
 
   // Academic data refreshes (e.g. after a quiz) update each card's mastery
   // display but never its position.
@@ -183,26 +236,76 @@ function GraphCanvas({ courseName, data, onOpenTopic }: { courseName: string; da
     [highlight, pathMode, allPathStates, selectedId]
   );
 
-  // --- camera helpers ---------------------------------------------------------------
+  // --- camera -----------------------------------------------------------------------
   const duration = useCallback((ms: number) => (prefersReducedMotion() ? 0 : ms), []);
 
-  const fitAll = useCallback(
-    () => fitView({ ...FIT_OPTIONS, duration: duration(450) }),
-    [fitView, duration]
+  // Runs `fn` once React Flow's stored canvas size matches the real element.
+  // Opening/closing the details panel resizes the canvas, and a fit computed
+  // against the stale size would leave the graph too small or off-center.
+  const afterLayout = useCallback(
+    (fn: () => void) => {
+      let frame = 0;
+      let tries = 0;
+      const check = () => {
+        const el = canvasRef.current;
+        const { width, height } = storeApi.getState();
+        const settled = !el || (Math.abs(width - el.clientWidth) < 1 && Math.abs(height - el.clientHeight) < 1);
+        if (settled || ++tries > 12) fn();
+        else frame = requestAnimationFrame(check);
+      };
+      frame = requestAnimationFrame(check);
+      return () => cancelAnimationFrame(frame);
+    },
+    [storeApi]
   );
+
+  // Called right after a programmatic camera command. When its animation has
+  // finished, save the resulting camera ("persist"), forget it ("default"),
+  // or ignore it ("transient"). A newer command or a user drag supersedes a
+  // pending one, so rapid zoom clicks save only the final camera.
+  const commitView = useCallback(
+    (intent: MoveIntent, ms: number) => {
+      window.clearTimeout(settleTimerRef.current);
+      if (intent === "transient") return;
+      settleTimerRef.current = window.setTimeout(() => {
+        if (intent === "default") {
+          clearViewport(courseName);
+          setViewportSaved(false);
+        } else {
+          saveViewport(courseName, getViewport());
+          setViewportSaved(true);
+        }
+      }, ms + 80);
+    },
+    [courseName, getViewport]
+  );
+
+  useEffect(() => () => window.clearTimeout(settleTimerRef.current), []);
+
+  const fitAll = useCallback(() => {
+    afterLayout(() => {
+      fitView({ ...FIT_OPTIONS, duration: duration(ANIM_MS) });
+      commitView("default", duration(ANIM_MS));
+    });
+  }, [fitView, duration, commitView, afterLayout]);
 
   const enterFocus = useCallback(
     (id: number) => {
       setSelectedId(id);
       setFocusId(id);
-      fitView({
-        nodes: neighborhood(model, id).map((n) => ({ id: String(n) })),
-        padding: 0.3,
-        maxZoom: 1.25,
-        duration: duration(450),
+      // Wait for the details panel to mount (it narrows the canvas) so the
+      // neighborhood is centered in the space that's actually left.
+      afterLayout(() => {
+        commitView("transient", 0);
+        fitView({
+          nodes: neighborhood(model, id).map((n) => ({ id: String(n) })),
+          padding: 0.3,
+          maxZoom: 1.25,
+          duration: duration(ANIM_MS),
+        });
       });
     },
-    [fitView, model, duration]
+    [fitView, model, duration, commitView, afterLayout]
   );
 
   const exitFocus = useCallback(() => {
@@ -215,40 +318,83 @@ function GraphCanvas({ courseName, data, onOpenTopic }: { courseName: string; da
     if (focusId !== null) exitFocus();
   }, [focusId, exitFocus]);
 
-  const centerOn = useCallback(
+  // Keep a newly selected topic (and, when it fits, its direct neighbors)
+  // in view when the details panel narrows the canvas or a topic is picked
+  // from the panel's lists. Moves the camera only — never a topic.
+  const revealSelected = useCallback(
     (id: number) => {
-      const n = nodesRef.current.find((x) => x.id === String(id));
-      if (!n) return;
-      const zoom = Math.max(getZoom(), 0.8);
-      // Below md the details panel is a bottom sheet covering roughly the
-      // lower half, so aim the card at the upper quarter of the canvas.
-      const narrow = typeof window !== "undefined" && window.innerWidth < 768;
-      const shift = narrow ? ((canvasRef.current?.clientHeight ?? 0) * 0.25) / zoom : 0;
-      setCenter(n.position.x + NODE_WIDTH / 2, n.position.y + NODE_HEIGHT / 2 + shift, {
-        zoom,
-        duration: duration(350),
-      });
+      const el = canvasRef.current;
+      if (!el) return;
+      const vp = getViewport();
+      const visible: Rect = { left: 0, top: 0, right: el.clientWidth, bottom: el.clientHeight };
+      // Below md the details panel is a bottom sheet overlaying the canvas.
+      const sheet = window.innerWidth < 768 ? el.parentElement?.querySelector("aside") : null;
+      if (sheet) {
+        const sheetTop = sheet.getBoundingClientRect().top - el.getBoundingClientRect().top;
+        visible.bottom = Math.max(0, Math.min(visible.bottom, sheetTop));
+      }
+      const byId = new Map(nodesRef.current.map((n) => [n.id, n]));
+      const self = byId.get(String(id));
+      if (!self) return;
+      const selfRect = nodeRect(self, vp);
+      const hood = neighborhood(model, id)
+        .map((n) => byId.get(String(n)))
+        .filter((n): n is Node<TopicNodeData> => n !== undefined)
+        .map((n) => nodeRect(n, vp));
+      const hoodRect = hood.length ? unionRects(hood) : selfRect;
+      const target = rectFits(hoodRect, visible, REVEAL_MARGIN) ? hoodRect : selfRect;
+      const { dx, dy } = revealDelta(target, visible, REVEAL_MARGIN);
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      commitView("transient", 0);
+      setViewport({ x: vp.x + dx, y: vp.y + dy, zoom: vp.zoom }, { duration: duration(ANIM_MS) });
     },
-    [setCenter, getZoom, duration]
+    [getViewport, setViewport, model, duration, commitView]
   );
 
-  // --- dragging (position only) ------------------------------------------------------
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) => {
-      setNodes((current) => {
-        const tolerance = SNAP_SCREEN_PX / Math.max(getZoom(), 0.1);
-        const adjusted = changes.map((change) => {
-          if (change.type === "position" && change.dragging && change.position) {
-            const others = current.map((n) => ({ id: Number(n.id), position: n.position }));
-            return { ...change, position: snapToNeighbors(Number(change.id), change.position, others, tolerance) };
-          }
-          return change;
-        });
-        return applyNodeChanges(adjusted, current);
-      });
+  useEffect(() => {
+    if (selectedId === null || focusId !== null) return;
+    return afterLayout(() => revealSelected(selectedId));
+  }, [selectedId, focusId, revealSelected, afterLayout]);
+
+  // The user finished a drag-pan or pinch: save the camera right away
+  // (and drop any pending programmatic save — the user took over).
+  const onMoveEnd = useCallback(
+    (_event: unknown, viewport: Viewport) => {
+      window.clearTimeout(settleTimerRef.current);
+      saveViewport(courseName, viewport);
+      setViewportSaved(true);
     },
-    [getZoom]
+    [courseName]
   );
+
+  // A saved camera can outlive the layout it was saved for (topics moved or
+  // removed). If it would show none of the topics, discard it and fit.
+  useEffect(() => {
+    if (!initialViewport) return;
+    const el = canvasRef.current;
+    if (!el) return;
+    const visible: Rect = { left: 0, top: 0, right: el.clientWidth, bottom: el.clientHeight };
+    const vp: Viewport = initialViewport;
+    if (anyRectVisible(nodesRef.current.map((n) => nodeRect(n, vp)), visible)) return;
+    clearViewport(courseName);
+    setViewportSaved(false);
+    let tries = 0;
+    let frame = 0;
+    const attempt = () => {
+      // fitView returns false until React Flow has measured the nodes.
+      if (flowRef.current.fitView({ ...FIT_OPTIONS, duration: 0 }) || ++tries > 30) return;
+      frame = requestAnimationFrame(attempt);
+    };
+    frame = requestAnimationFrame(attempt);
+    return () => cancelAnimationFrame(frame);
+    // Mount-only: validates the camera restored at startup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --- dragging (position only, completely free-form) ---------------------------------
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    setNodes((current) => applyNodeChanges(changes, current));
+  }, []);
 
   const onNodeDragStart = useCallback(() => {
     draggingRef.current = true;
@@ -272,23 +418,23 @@ function GraphCanvas({ courseName, data, onOpenTopic }: { courseName: string; da
     setCustomized(true);
   }, [courseName]);
 
+  // Reset everything visual: node positions, saved camera and zoom.
   const resetLayout = useCallback(() => {
     clearLayout(courseName);
+    clearViewport(courseName);
+    setCustomized(false);
+    setViewportSaved(false);
+    setFocusId(null);
     const defaults = computeDefaultPositions(data.nodes, data.edges);
     setNodes((current) => current.map((n) => ({ ...n, position: defaults[Number(n.id)] ?? n.position })));
-    setCustomized(false);
-    window.requestAnimationFrame(() => fitAll());
+    fitAll();
   }, [courseName, data, fitAll]);
 
   // --- selection ----------------------------------------------------------------------
-  const onNodeClick = useCallback(
-    (_: unknown, node: Node) => {
-      if (suppressClickRef.current) return;
-      setSelectedId(Number(node.id));
-      if (window.innerWidth < 768) centerOn(Number(node.id));
-    },
-    [centerOn]
-  );
+  const onNodeClick = useCallback((_: unknown, node: Node) => {
+    if (suppressClickRef.current) return;
+    setSelectedId(Number(node.id));
+  }, []);
 
   const onNodeDoubleClick = useCallback(
     (_: unknown, node: Node) => {
@@ -298,15 +444,22 @@ function GraphCanvas({ courseName, data, onOpenTopic }: { courseName: string; da
     [enterFocus]
   );
 
+  // Double-clicking empty canvas returns to the full graph.
+  const onCanvasDoubleClick = useCallback(
+    (e: MouseEvent<HTMLDivElement>) => {
+      if (!(e.target as HTMLElement).classList.contains("react-flow__pane")) return;
+      if (focusId !== null) exitFocus();
+      else fitAll();
+    },
+    [focusId, exitFocus, fitAll]
+  );
+
   const selectFromPanel = useCallback(
     (id: number) => {
       if (focusId !== null) enterFocus(id);
-      else {
-        setSelectedId(id);
-        centerOn(id);
-      }
+      else setSelectedId(id); // the reveal effect brings it into view
     },
-    [focusId, enterFocus, centerOn]
+    [focusId, enterFocus]
   );
 
   const onKeyDown = useCallback(
@@ -326,13 +479,13 @@ function GraphCanvas({ courseName, data, onOpenTopic }: { courseName: string; da
     return { id: n.id, name: n.name, status: n.status, score: n.score };
   };
 
-  const legendPath = pathMode;
+  const canReset = customized || viewportSaved;
 
   return (
     <div className="flex h-full min-h-[440px] flex-col">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[rgba(var(--ink-rgb),0.10)] px-4 py-2.5 text-xs md:px-6">
         <ul className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[var(--ink)]/70" aria-label="Legend">
-          {legendPath
+          {pathMode
             ? PATH_ORDER.map((p) => (
                 <li key={p} className="flex items-center gap-1.5">
                   <PathIcon state={p} />
@@ -349,7 +502,7 @@ function GraphCanvas({ courseName, data, onOpenTopic }: { courseName: string; da
 
         <div className="ml-auto flex items-center gap-1.5">
           <span className="mr-2 hidden text-[11px] text-[var(--ink)]/45 xl:inline">
-            Drag cards · scroll to zoom · double-click to focus
+            Drag cards to move · double-click a topic to focus
           </span>
           {focusId !== null && (
             <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={exitFocus}>
@@ -369,79 +522,114 @@ function GraphCanvas({ courseName, data, onOpenTopic }: { courseName: string; da
           >
             Learning path
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2 text-xs text-[var(--ink)]/60"
-            onClick={resetLayout}
-            disabled={!customized}
-            title={customized ? "Restore the default arrangement" : "Layout is already the default"}
-          >
-            Reset layout
-          </Button>
+          {canReset ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs text-[var(--ink)]/70"
+              onClick={resetLayout}
+            >
+              Reset layout
+            </Button>
+          ) : (
+            <span className="flex h-7 items-center gap-1 px-2 text-[11px] text-[var(--ink)]/45">
+              <Check size={12} aria-hidden /> Default layout
+            </span>
+          )}
         </div>
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col md:flex-row">
-      <div
-        ref={canvasRef}
-        className="relative min-h-0 min-w-0 flex-1 select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgba(var(--accent-rgb),0.45)]"
-        tabIndex={0}
-        onKeyDown={onKeyDown}
-        aria-label="Prerequisite graph. Drag cards to rearrange, scroll to zoom, press F to fit and Escape to clear selection."
-      >
-        <GraphMarkers />
-        <GraphUiContext.Provider value={ui}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            onNodesChange={onNodesChange}
-            onNodeClick={onNodeClick}
-            onNodeDoubleClick={onNodeDoubleClick}
-            onNodeDragStart={onNodeDragStart}
-            onNodeDrag={onNodeDrag}
-            onNodeDragStop={onNodeDragStop}
-            onNodeMouseEnter={(_, n) => {
-              if (!draggingRef.current) setHoveredId(Number(n.id));
-            }}
-            onNodeMouseLeave={() => {
-              if (!draggingRef.current) setHoveredId(null);
-            }}
-            onPaneClick={() => setSelectedId(null)}
-            nodesDraggable
-            nodesConnectable={false}
-            edgesUpdatable={false}
-            edgesFocusable={false}
-            elementsSelectable={false}
-            selectNodesOnDrag={false}
-            deleteKeyCode={null}
-            selectionKeyCode={null}
-            multiSelectionKeyCode={null}
-            nodeDragThreshold={3}
-            zoomOnDoubleClick={false}
-            minZoom={0.25}
-            maxZoom={2}
-            fitView
-            fitViewOptions={FIT_OPTIONS}
-          >
-            <Background color="rgba(var(--ink-rgb), 0.14)" gap={20} />
-            <Controls showInteractive={false} />
-            {nodes.length >= MINIMAP_THRESHOLD && (
-              <MiniMap
-                pannable
-                zoomable
-                className="!hidden md:!block"
-                nodeColor={(n) => STATUS_COLOR[normalizeStatus((n.data as TopicNodeData).status)]}
-                nodeStrokeWidth={0}
-                maskColor="rgba(var(--ink-rgb), 0.08)"
-                style={{ background: "var(--bg-surface)", border: "1px solid rgba(var(--ink-rgb), 0.12)", borderRadius: 8 }}
-              />
-            )}
-          </ReactFlow>
-        </GraphUiContext.Provider>
-      </div>
+        <div
+          ref={canvasRef}
+          className="relative min-h-0 min-w-0 flex-1 select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgba(var(--accent-rgb),0.45)]"
+          tabIndex={0}
+          onKeyDown={onKeyDown}
+          onDoubleClick={onCanvasDoubleClick}
+          aria-label="Prerequisite graph. Drag cards to rearrange and drag the background to pan. Use the zoom controls to zoom, F to fit, and Escape to clear selection."
+        >
+          <GraphMarkers />
+          <GraphUiContext.Provider value={ui}>
+            {/*
+              Interaction model:
+              - plain mouse wheel / two-finger scroll: NOT handled here, so the
+                page scrolls. preventScrolling={false} stops React Flow from
+                calling preventDefault() on ordinary wheel events (its default
+                does, even with zoomOnScroll off, which trapped page scrolling).
+              - trackpad pinch: browsers deliver it as a wheel event with
+                ctrlKey set; zoomOnPinch keeps handling exactly those events.
+              - empty-canvas drag pans, card drag moves, zoom via the controls.
+            */}
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              onNodesChange={onNodesChange}
+              onNodeClick={onNodeClick}
+              onNodeDoubleClick={onNodeDoubleClick}
+              onNodeDragStart={onNodeDragStart}
+              onNodeDrag={onNodeDrag}
+              onNodeDragStop={onNodeDragStop}
+              onNodeMouseEnter={(_, n) => {
+                if (!draggingRef.current) setHoveredId(Number(n.id));
+              }}
+              onNodeMouseLeave={() => {
+                if (!draggingRef.current) setHoveredId(null);
+              }}
+              onPaneClick={() => setSelectedId(null)}
+              onMoveEnd={onMoveEnd}
+              nodesDraggable
+              nodesConnectable={false}
+              edgesUpdatable={false}
+              edgesFocusable={false}
+              elementsSelectable={false}
+              selectNodesOnDrag={false}
+              deleteKeyCode={null}
+              selectionKeyCode={null}
+              multiSelectionKeyCode={null}
+              nodeDragThreshold={3}
+              panOnDrag
+              panOnScroll={false}
+              zoomOnScroll={false}
+              zoomOnPinch
+              zoomOnDoubleClick={false}
+              preventScrolling={false}
+              minZoom={MIN_ZOOM}
+              maxZoom={MAX_ZOOM}
+              defaultViewport={initialViewport ?? undefined}
+              fitView={initialViewport === null}
+              fitViewOptions={FIT_OPTIONS}
+            >
+              <Background color="rgba(var(--ink-rgb), 0.14)" gap={20} />
+              <Panel position="bottom-left" className="!m-3">
+                <GraphZoomControls
+                  min={MIN_ZOOM}
+                  max={MAX_ZOOM}
+                  step={ZOOM_STEP}
+                  duration={duration(ANIM_MS)}
+                  onFit={fitAll}
+                  onZoomed={() => commitView("persist", duration(ANIM_MS))}
+                />
+              </Panel>
+              {nodes.length >= MINIMAP_THRESHOLD && (
+                <MiniMap
+                  pannable
+                  zoomable={false}
+                  className="!hidden md:!block"
+                  nodeColor={(n) => STATUS_COLOR[normalizeStatus((n.data as TopicNodeData).status)]}
+                  nodeStrokeWidth={0}
+                  maskColor="rgba(var(--ink-rgb), 0.08)"
+                  style={{
+                    background: "var(--bg-surface)",
+                    border: "1px solid rgba(var(--ink-rgb), 0.12)",
+                    borderRadius: 8,
+                  }}
+                />
+              )}
+            </ReactFlow>
+          </GraphUiContext.Provider>
+        </div>
 
         {selected && selectedId !== null && (
           <TopicDetailPanel

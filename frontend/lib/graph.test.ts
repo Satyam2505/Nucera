@@ -1,4 +1,4 @@
-// Plain-Node tests for the pure graph modules (graph-model, graph-layout) —
+// Plain-Node tests for the pure graph modules (graph-model, graph-layout, graph-viewport) —
 // same approach as greeting.test.ts: only Node's built-in `assert`, no test
 // framework. To run ad hoc, Node's ESM loader needs explicit extensions:
 //   sed 's#"./graph-\([a-z]*\)"#"./graph-\1.ts"#' lib/graph.test.ts > lib/_run.test.ts \
@@ -17,12 +17,23 @@ import {
 } from "./graph-model";
 import {
   clearLayout,
+  clearViewport,
   computeDefaultPositions,
   loadLayout,
+  loadViewport,
   saveLayout,
-  snapToNeighbors,
+  saveViewport,
   type StorageLike,
 } from "./graph-layout";
+import {
+  anyRectVisible,
+  clampZoom,
+  rectFits,
+  revealDelta,
+  stepZoom,
+  unionRects,
+  zoomPercent,
+} from "./graph-viewport";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -200,20 +211,6 @@ test("default layout copes with 120 topics", () => {
   assert.equal(Object.keys(computeDefaultPositions(many, chain)).length, 120);
 });
 
-// --- snapping ------------------------------------------------------------------
-test("snaps to a neighbor's edge within tolerance, per axis", () => {
-  const others = [{ id: 2, position: { x: 100, y: 200 } }];
-  assert.deepEqual(snapToNeighbors(1, { x: 103, y: 500 }, others, 6), { x: 100, y: 500 });
-  assert.deepEqual(snapToNeighbors(1, { x: 500, y: 197 }, others, 6), { x: 500, y: 200 });
-});
-test("does not snap beyond tolerance or to itself", () => {
-  const others = [
-    { id: 1, position: { x: 100, y: 100 } },
-    { id: 2, position: { x: 300, y: 300 } },
-  ];
-  assert.deepEqual(snapToNeighbors(1, { x: 110, y: 110 }, others, 6), { x: 110, y: 110 });
-});
-
 // --- persistence ------------------------------------------------------------------
 test("layout round-trips per course and courses are independent", () => {
   const s = memoryStorage();
@@ -254,6 +251,97 @@ test("storage that throws never breaks callers", () => {
   assert.equal(loadLayout("X", bad), null);
   saveLayout("X", { 1: { x: 0, y: 0 } }, bad);
   clearLayout("X", bad);
+});
+
+// --- viewport persistence -------------------------------------------------------
+test("viewport round-trips per course and is independent of node layout", () => {
+  const s = memoryStorage();
+  saveViewport("DBMS", { x: 12.345, y: -80, zoom: 1.1234 }, s);
+  saveViewport("DSA", { x: 0, y: 0, zoom: 0.5 }, s);
+  assert.deepEqual(loadViewport("DBMS", s), { x: 12.35, y: -80, zoom: 1.123 });
+  assert.deepEqual(loadViewport("DSA", s), { x: 0, y: 0, zoom: 0.5 });
+  saveLayout("DBMS", { 1: { x: 1, y: 2 } }, s);
+  clearLayout("DBMS", s);
+  assert.notEqual(loadViewport("DBMS", s), null); // clearing positions leaves the camera alone
+  clearViewport("DBMS", s);
+  assert.equal(loadViewport("DBMS", s), null);
+  assert.notEqual(loadViewport("DSA", s), null);
+});
+test("corrupt or hostile stored viewports are ignored", () => {
+  const s = memoryStorage();
+  for (const [k, v] of [
+    ["A", "not json"],
+    ["B", JSON.stringify({ x: "1", y: 2, zoom: 1 })],
+    ["C", JSON.stringify({ x: 1, y: 2, zoom: 0 })],
+    ["D", JSON.stringify({ x: 1, y: 2, zoom: -3 })],
+    ["E", JSON.stringify(null)],
+    ["F", JSON.stringify([1, 2, 3])],
+  ]) {
+    s.setItem(`nucera:graph-viewport:${k}`, v);
+    assert.equal(loadViewport(k, s), null, k);
+  }
+  assert.equal(loadViewport("X", null), null);
+});
+test("viewport storage never throws when storage is blocked", () => {
+  const bad: StorageLike = {
+    getItem: () => {
+      throw new Error("blocked");
+    },
+    setItem: () => {
+      throw new Error("quota");
+    },
+    removeItem: () => {
+      throw new Error("blocked");
+    },
+  };
+  assert.equal(loadViewport("X", bad), null);
+  saveViewport("X", { x: 0, y: 0, zoom: 1 }, bad);
+  clearViewport("X", bad);
+});
+
+// --- camera math -------------------------------------------------------------------
+const view = { left: 0, top: 0, right: 800, bottom: 600 };
+test("no camera movement when the target is already visible", () =>
+  assert.deepEqual(revealDelta({ left: 100, top: 100, right: 300, bottom: 200 }, view, 24), { dx: 0, dy: 0 }));
+test("clipped on the right: minimal shift left", () =>
+  assert.deepEqual(revealDelta({ left: 700, top: 100, right: 900, bottom: 200 }, view, 24), { dx: -124, dy: 0 }));
+test("clipped on the left/top: minimal shift right/down", () =>
+  assert.deepEqual(revealDelta({ left: -50, top: -10, right: 150, bottom: 80 }, view, 24), { dx: 74, dy: 34 }));
+test("clipped bottom-right shifts both axes", () =>
+  assert.deepEqual(revealDelta({ left: 650, top: 520, right: 850, bottom: 640 }, view, 24), { dx: -74, dy: -64 }));
+test("target larger than the view keeps its leading edge visible", () => {
+  const d = revealDelta({ left: 700, top: 100, right: 1900, bottom: 200 }, view, 24);
+  assert.equal(700 + d.dx, 24);
+});
+test("rectFits and unionRects", () => {
+  const u = unionRects([
+    { left: 10, top: 10, right: 50, bottom: 50 },
+    { left: 200, top: 100, right: 260, bottom: 140 },
+  ]);
+  assert.deepEqual(u, { left: 10, top: 10, right: 260, bottom: 140 });
+  assert.equal(rectFits(u, view, 24), true);
+  assert.equal(rectFits({ left: 0, top: 0, right: 900, bottom: 10 }, view, 24), false);
+});
+test("anyRectVisible rejects a camera that shows nothing", () => {
+  const far = { left: 5000, top: 5000, right: 5200, bottom: 5100 };
+  assert.equal(anyRectVisible([far], view), false);
+  assert.equal(anyRectVisible([far, { left: 700, top: 500, right: 900, bottom: 700 }], view), true);
+  assert.equal(anyRectVisible([], view), false);
+});
+test("zoom steps are additive, predictable, and clamped", () => {
+  assert.equal(stepZoom(1, 1, 0.15, 0.25, 1.75), 1.15);
+  assert.equal(stepZoom(1.15, 1, 0.15, 0.25, 1.75), 1.3);
+  assert.equal(stepZoom(1, -1, 0.15, 0.25, 1.75), 0.85);
+  assert.equal(stepZoom(1.7, 1, 0.15, 0.25, 1.75), 1.75);
+  assert.equal(stepZoom(0.3, -1, 0.15, 0.25, 1.75), 0.25);
+  assert.equal(stepZoom(0.1 + 0.2, 1, 0.15, 0.25, 1.75), 0.45); // no float noise
+});
+test("clampZoom and zoomPercent", () => {
+  assert.equal(clampZoom(9, 0.25, 1.75), 1.75);
+  assert.equal(clampZoom(0.01, 0.25, 1.75), 0.25);
+  assert.equal(zoomPercent(0.6584), 66);
+  assert.equal(zoomPercent(1.75), 175);
+  assert.equal(zoomPercent(1), 100);
 });
 
 console.log(`\n${passed} passed`);
