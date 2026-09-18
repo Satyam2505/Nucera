@@ -128,7 +128,7 @@ export default function CourseWorkspace() {
   const activeTopicId = courseTopics.some((t) => t.id === selectedTopicId) ? selectedTopicId : null;
 
   return (
-    <div className="min-h-screen hero-gradient text-[var(--ink)] flex flex-col">
+    <div className="h-screen hero-gradient text-[var(--ink)] flex flex-col">
       <header className="flex items-center justify-between px-6 py-4 border-b border-[rgba(var(--ink-rgb),0.10)] surface-strong sticky top-0 z-20">
         <div className="flex items-center gap-4 min-w-0">
           <button
@@ -151,7 +151,7 @@ export default function CourseWorkspace() {
         </button>
       </header>
 
-      <div className="flex flex-1 overflow-hidden relative">
+      <div className="flex min-h-0 flex-1 overflow-hidden relative">
         {/* Positioned `absolute` within this already-below-header `relative`
             row (not `fixed`), so it fills exactly the remaining viewport
             height without hardcoding the header's pixel height anywhere. */}
@@ -231,7 +231,15 @@ export default function CourseWorkspace() {
           <div className="flex-1 overflow-y-auto">
             {view === "chat" && <ChatView topicId={activeTopicId} />}
             {view === "quiz" && <QuizView topicId={activeTopicId} />}
-            {view === "graph" && <GraphView courseName={courseName} />}
+            {view === "graph" && (
+              <GraphView
+                courseName={courseName}
+                onOpenTopic={(topicId, target) => {
+                  setSelectedTopicId(topicId);
+                  setView(target);
+                }}
+              />
+            )}
             {view === "mastery" && <MasteryView courseTopics={courseTopics} />}
             {view === "sources" && (
               <SourcesView
