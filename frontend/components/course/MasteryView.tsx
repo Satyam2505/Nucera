@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { Card } from "@/components/ui/card";
 import { Topic } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
 import { STATUS_COLOR, STATUS_LABEL, type MasteryStatusKey } from "@/lib/status-colors";
@@ -142,7 +143,7 @@ function BreakdownList({
   empty: string;
 }) {
   return (
-    <div className="surface rounded-2xl p-4">
+    <Card className="surface rounded-2xl p-4 border-[rgba(var(--ink-rgb),0.09)]">
       <p className="text-xs font-medium mb-3" style={{ color: STATUS_COLOR[tone] }}>
         {title}
       </p>
@@ -155,6 +156,6 @@ function BreakdownList({
           </li>
         ))}
       </ul>
-    </div>
+    </Card>
   );
 }

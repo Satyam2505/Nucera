@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { api, QuizQuestion, QuizSubmitResult } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
 
@@ -58,44 +62,49 @@ export default function QuizView({ topicId }: { topicId: number | null }) {
 
       {!loading &&
         questions.map((q, idx) => (
-          <div key={q.id} className="surface rounded-xl p-4">
+          <Card key={q.id} className="surface rounded-xl p-4 border-[rgba(var(--ink-rgb),0.09)]">
             <p className="text-sm font-medium text-[var(--ink)] mb-3">
               {idx + 1}. {q.question_text}
             </p>
-            <div className="space-y-2">
+            <RadioGroup
+              value={answers[q.id] ?? ""}
+              onValueChange={(value) => setAnswers((prev) => ({ ...prev, [q.id]: value }))}
+              className="space-y-2"
+            >
               {Object.entries(q.options).map(([key, label]) => (
-                <label key={key} className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300 cursor-pointer">
-                  <input
-                    type="radio"
-                    name={`q-${q.id}`}
-                    checked={answers[q.id] === key}
-                    onChange={() => setAnswers((prev) => ({ ...prev, [q.id]: key }))}
-                    className="accent-[var(--accent)]"
+                <div key={key} className="flex items-center gap-2">
+                  <RadioGroupItem
+                    value={key}
+                    id={`q${q.id}-${key}`}
+                    className="border-[rgba(var(--ink-rgb),0.3)] text-[var(--accent)]"
                   />
-                  <span>
+                  <Label
+                    htmlFor={`q${q.id}-${key}`}
+                    className="text-sm font-normal text-stone-700 dark:text-stone-300 cursor-pointer"
+                  >
                     {key}. {label}
-                  </span>
-                </label>
+                  </Label>
+                </div>
               ))}
-            </div>
-          </div>
+            </RadioGroup>
+          </Card>
         ))}
 
       {!loading && questions.length > 0 && !result && (
-        <button
+        <Button
           onClick={handleSubmit}
           disabled={submitting}
-          className="w-full rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition text-[var(--accent-ink)] text-sm font-medium py-2.5 disabled:opacity-50 accent-ring"
+          className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-ink)] h-auto py-2.5 accent-ring"
         >
           {submitting ? "Submitting..." : "Submit answers"}
-        </button>
+        </Button>
       )}
 
       {result && (
-        <div className="surface rounded-xl p-4 text-sm text-[var(--ink)] border border-[rgba(var(--accent-rgb),0.30)]">
+        <Card className="surface rounded-xl p-4 text-sm text-[var(--ink)] border-[rgba(var(--accent-rgb),0.30)]">
           Score: {result.correct}/{result.total} ({result.score_percent.toFixed(0)}%) — mastery now{" "}
           {result.mastery.score} ({result.mastery.status})
-        </div>
+        </Card>
       )}
     </div>
   );

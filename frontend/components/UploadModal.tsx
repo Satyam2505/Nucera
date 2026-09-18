@@ -2,15 +2,19 @@
 
 import { FormEvent, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
-
-import Modal from "./Modal";
 
 const SOURCE_TYPES = ["official_upload", "self_supplied", "web_fallback"];
 
 const inputClass =
-  "w-full rounded-lg linen px-3 py-2 text-sm text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:ring-2 focus:ring-[rgba(var(--accent-rgb),0.30)] focus:border-[rgba(var(--accent-rgb),0.50)] transition";
+  "linen text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus-visible:ring-[rgba(var(--accent-rgb),0.30)]";
 
 export default function UploadModal({ onClose }: { onClose: () => void }) {
   const { topics, selectedTopicId, refresh } = useAppState();
@@ -49,73 +53,84 @@ export default function UploadModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="Add source" onClose={onClose}>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Topic</label>
-          <select
-            className={inputClass}
-            value={topicId ?? ""}
-            onChange={(e) => setTopicId(Number(e.target.value))}
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="bg-[var(--bg-surface)] text-[var(--ink)] sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-[var(--ink)]">Add source</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Topic</Label>
+            <Select value={topicId ? String(topicId) : ""} onValueChange={(v) => setTopicId(Number(v))}>
+              <SelectTrigger className={`w-full ${inputClass}`}>
+                <SelectValue placeholder="Select a topic" />
+              </SelectTrigger>
+              <SelectContent>
+                {topics.map((t) => (
+                  <SelectItem key={t.id} value={String(t.id)}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Source type</Label>
+            <Select value={sourceType} onValueChange={setSourceType}>
+              <SelectTrigger className={`w-full ${inputClass}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SOURCE_TYPES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Title</Label>
+            <Input
+              className={inputClass}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Lecture 3 notes"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Paste text</Label>
+            <Textarea
+              className={`${inputClass} h-28`}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Paste notes here..."
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Or upload a file</Label>
+            <Input
+              type="file"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="text-sm text-stone-600 dark:text-stone-300 file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--accent)] file:text-[var(--accent-ink)] file:px-3 file:py-1.5 file:text-xs hover:file:bg-[var(--accent-hover)] h-auto py-1.5"
+            />
+          </div>
+
+          <Button
+            type="submit"
+            disabled={submitting || !topicId}
+            className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-ink)] h-auto py-2.5 accent-ring"
           >
-            {topics.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </div>
+            {submitting ? "Adding..." : "Add source"}
+          </Button>
 
-        <div>
-          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Source type</label>
-          <select className={inputClass} value={sourceType} onChange={(e) => setSourceType(e.target.value)}>
-            {SOURCE_TYPES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Title</label>
-          <input
-            className={inputClass}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Lecture 3 notes"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Paste text</label>
-          <textarea
-            className={`${inputClass} h-28`}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Paste notes here..."
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Or upload a file</label>
-          <input
-            type="file"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="text-sm text-stone-600 dark:text-stone-300 file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--accent)] file:text-[var(--accent-ink)] file:px-3 file:py-1.5 file:text-xs hover:file:bg-[var(--accent-hover)]"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={submitting || !topicId}
-          className="w-full rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition text-[var(--accent-ink)] text-sm font-medium py-2.5 disabled:opacity-50 accent-ring"
-        >
-          {submitting ? "Adding..." : "Add source"}
-        </button>
-
-        {status && <p className="text-xs text-stone-600 dark:text-stone-300 text-center">{status}</p>}
-      </form>
-    </Modal>
+          {status && <p className="text-xs text-stone-600 dark:text-stone-300 text-center">{status}</p>}
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

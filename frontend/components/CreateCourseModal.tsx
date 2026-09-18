@@ -3,13 +3,17 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
 
-import Modal from "./Modal";
-
 const inputClass =
-  "w-full rounded-lg linen px-3 py-2 text-sm text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:ring-2 focus:ring-[rgba(var(--accent-rgb),0.30)] focus:border-[rgba(var(--accent-rgb),0.50)] transition";
+  "linen text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus-visible:ring-[rgba(var(--accent-rgb),0.30)]";
 
 export default function CreateCourseModal({ onClose }: { onClose: () => void }) {
   const { refresh } = useAppState();
@@ -42,46 +46,55 @@ export default function CreateCourseModal({ onClose }: { onClose: () => void }) 
   }
 
   return (
-    <Modal title="List a new course" onClose={onClose}>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Course name</label>
-          <input
-            className={inputClass}
-            value={courseName}
-            onChange={(e) => setCourseName(e.target.value)}
-            placeholder="e.g. Operating Systems"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">First topic name</label>
-          <input
-            className={inputClass}
-            value={topicName}
-            onChange={(e) => setTopicName(e.target.value)}
-            placeholder="e.g. Processes and Threads"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">Description (optional)</label>
-          <textarea
-            className={`${inputClass} h-20`}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={submitting || !courseName.trim() || !topicName.trim()}
-          className="w-full rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition text-[var(--accent-ink)] text-sm font-medium py-2.5 disabled:opacity-50 accent-ring"
-        >
-          {submitting ? "Creating..." : "Create course"}
-        </button>
-        {error && <p className="text-xs text-[var(--error-text)] text-center">{error}</p>}
-        <p className="text-[11px] text-stone-500 dark:text-stone-400 text-center">
-          You can add more topics and prerequisites to it from inside the course.
-        </p>
-      </form>
-    </Modal>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="bg-[var(--bg-surface)] text-[var(--ink)] sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-[var(--ink)]">List a new course</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Course name</Label>
+            <Input
+              className={inputClass}
+              value={courseName}
+              onChange={(e) => setCourseName(e.target.value)}
+              placeholder="e.g. Operating Systems"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">First topic name</Label>
+            <Input
+              className={inputClass}
+              value={topicName}
+              onChange={(e) => setTopicName(e.target.value)}
+              placeholder="e.g. Processes and Threads"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Description (optional)</Label>
+            <Textarea
+              className={`${inputClass} h-20`}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+          <Button
+            type="submit"
+            disabled={submitting || !courseName.trim() || !topicName.trim()}
+            className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-ink)] h-auto py-2.5 accent-ring"
+          >
+            {submitting ? "Creating..." : "Create course"}
+          </Button>
+          {error && (
+            <Alert variant="destructive" className="bg-[var(--error-bg)] border-[var(--error-border)]">
+              <AlertDescription className="text-[var(--error-text)] text-center w-full">{error}</AlertDescription>
+            </Alert>
+          )}
+          <p className="text-[11px] text-stone-500 dark:text-stone-400 text-center">
+            You can add more topics and prerequisites to it from inside the course.
+          </p>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

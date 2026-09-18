@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import ReactFlow, { Background, Controls } from "reactflow";
 import "reactflow/dist/style.css";
 
+import { Badge } from "@/components/ui/badge";
 import { useAppState } from "@/lib/AppStateContext";
 import { buildEdges, layoutNodes } from "@/lib/graph-utils";
 import { STATUS_COLOR, STATUS_LABEL, type MasteryStatusKey } from "@/lib/status-colors";
@@ -25,10 +26,10 @@ export default function GraphView({ courseName }: { courseName: string }) {
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-4 px-6 py-3 border-b border-[rgba(var(--ink-rgb),0.10)] text-xs">
         {LEGEND_ORDER.map((status) => (
-          <div key={status} className="flex items-center gap-1.5 text-stone-600 dark:text-stone-400">
+          <Badge key={status} variant="secondary" className="gap-1.5 font-normal text-stone-600 dark:text-stone-400">
             <span className="h-2 w-2 rounded-full" style={{ background: STATUS_COLOR[status] }} aria-hidden />
             {STATUS_LABEL[status]}
-          </div>
+          </Badge>
         ))}
       </div>
 

@@ -2,6 +2,10 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { api, ChatTurn, SourceCitation } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
 
@@ -86,9 +90,12 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
           if (m.role === "error") {
             return (
               <div key={i} className="flex justify-start">
-                <div className="max-w-lg rounded-2xl px-4 py-2.5 text-sm bg-[var(--error-bg)] border border-[var(--error-border)] text-[var(--error-text)]">
-                  {m.text}
-                </div>
+                <Alert
+                  variant="destructive"
+                  className="max-w-lg w-auto rounded-2xl bg-[var(--error-bg)] border-[var(--error-border)]"
+                >
+                  <AlertDescription className="text-[var(--error-text)] text-sm">{m.text}</AlertDescription>
+                </Alert>
               </div>
             );
           }
@@ -111,13 +118,14 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
                 {m.sources && m.sources.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {m.sources.map((s, si) => (
-                      <span
+                      <Badge
                         key={si}
-                        className="text-[11px] text-stone-600 dark:text-stone-400 bg-[rgba(var(--ink-rgb),0.05)] border border-[rgba(var(--ink-rgb),0.10)] rounded-full px-2 py-0.5"
+                        variant="secondary"
+                        className="text-[11px] font-normal text-stone-600 dark:text-stone-400"
                       >
                         {s.source}
                         {s.page != null ? `, p. ${s.page}` : ""}
-                      </span>
+                      </Badge>
                     ))}
                   </div>
                 )}
@@ -141,20 +149,20 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
 
       <form onSubmit={handleAsk} className="p-4 border-t border-[rgba(var(--ink-rgb),0.10)]">
         <div className="flex items-center gap-2 rounded-xl linen shadow-sm px-3 py-2 focus-within:border-[rgba(var(--accent-rgb),0.50)] transition">
-          <input
+          <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={!topicId || asking}
             placeholder={topicId ? "Ask a question..." : "Select a topic to start"}
-            className="flex-1 bg-transparent text-sm outline-none text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 disabled:opacity-50"
+            className="flex-1 border-0 shadow-none bg-transparent h-auto p-0 focus-visible:ring-0 text-sm text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 disabled:opacity-50"
           />
-          <button
+          <Button
             type="submit"
             disabled={!topicId || asking || !input.trim()}
-            className="rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition text-[var(--accent-ink)] text-xs font-medium px-3.5 py-1.5 disabled:opacity-40"
+            className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-ink)] text-xs font-medium h-auto px-3.5 py-1.5"
           >
             {asking ? "..." : "Ask"}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
