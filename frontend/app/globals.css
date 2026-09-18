@@ -1,3 +1,10 @@
+/* Avenir Next (the logo's wordmark face) isn't installed on most non-Apple
+   systems — Montserrat is the closest freely-hosted match and keeps the
+   brand's geometric-humanist look intact when it falls back. Must stay
+   the very first statement: Tailwind's own @import below gets expanded
+   in place by the build, which would otherwise push this import past
+   generated content and violate CSS's "@import must come first" rule. */
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -104,76 +111,95 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg-page: #1c1815;
-  --bg-sidebar: #141110;
-  --bg-surface: #262019;
-  --bg-linen: #302921;
+  /* Neutral charcoal grey, anchored on the two exact tones the user
+     picked (page/base at #1f2020, surface/linen at #404040) rather than
+     another invented color story — flat and understated on purpose. */
+  --bg-page: #1f2020;
+  --bg-sidebar: #151616;
+  --bg-surface: #2b2c2c;
+  --bg-linen: #404040;
 
-  --ink: #ede6d9;
-  --ink-rgb: 237, 230, 217;
+  --ink: #eaeaea;
+  --ink-rgb: 234, 234, 234;
 
-  --accent: #ff6d1f;
-  --accent-rgb: 255, 109, 31;
-  --accent-hover: #ff7a33;
-  --accent-ink: #201a14;
+  --accent: #6d8dfd;
+  --accent-rgb: 109, 141, 253;
+  --accent-hover: #8aa3ff;
+  --accent-ink: #14161f;
 
-  --status-mastered: #6fcb66;
-  --status-in-progress: #e2a93b;
-  --status-unmastered: #9c9686;
+  --status-mastered: #6fcf7a;
+  --status-in-progress: #e0973d;
+  --status-unmastered: #8a8371;
   --status-missed: #e2685c;
-  --status-mastered-fill: rgba(111, 203, 102, 0.16);
-  --status-in-progress-fill: rgba(226, 169, 59, 0.18);
-  --status-unmastered-fill: rgba(237, 230, 217, 0.08);
+  --status-mastered-fill: rgba(111, 207, 122, 0.16);
+  --status-in-progress-fill: rgba(224, 151, 61, 0.18);
+  --status-unmastered-fill: rgba(234, 234, 234, 0.08);
   --status-missed-fill: rgba(226, 104, 92, 0.16);
 
   --error-text: #ff9187;
   --error-bg: rgba(226, 104, 92, 0.14);
   --error-border: rgba(226, 104, 92, 0.35);
   --warn-text: #f0c36b;
-  --warn-bg: rgba(226, 169, 59, 0.14);
-  --warn-border: rgba(226, 169, 59, 0.3);
+  --warn-bg: rgba(240, 195, 107, 0.14);
+  --warn-border: rgba(240, 195, 107, 0.3);
 
   /* Unlike light mode, dark mode's secondary/muted still read fine as a
      recessed dark tone, so these keep aliasing bg-sidebar here. */
   --secondary: var(--bg-sidebar);
   --muted: var(--bg-sidebar);
+
+  /* The sidebar is dark in both themes, but light mode's sidebar sits on
+     a cool navy while --ink there is dark (for the light main content) —
+     so those tokens are hardcoded cool-white at the base :root level.
+     Here in dark mode --ink is already a warm off-white appropriate for
+     the (also dark) sidebar, so these just alias it instead of repeating
+     a separate literal. */
+  --sidebar-foreground: var(--ink);
+  --sidebar-accent: rgba(var(--ink-rgb), 0.08);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: rgba(var(--ink-rgb), 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --bg-page: #1c1815;
-    --bg-sidebar: #141110;
-    --bg-surface: #262019;
-    --bg-linen: #302921;
+    --bg-page: #1f2020;
+    --bg-sidebar: #151616;
+    --bg-surface: #2b2c2c;
+    --bg-linen: #404040;
 
-    --ink: #ede6d9;
-    --ink-rgb: 237, 230, 217;
+    --ink: #eaeaea;
+    --ink-rgb: 234, 234, 234;
 
-    --accent: #ff6d1f;
-    --accent-rgb: 255, 109, 31;
-    --accent-hover: #ff7a33;
-    --accent-ink: #201a14;
+    --accent: #6d8dfd;
+    --accent-rgb: 109, 141, 253;
+    --accent-hover: #8aa3ff;
+    --accent-ink: #14161f;
 
-    --status-mastered: #6fcb66;
-    --status-in-progress: #e2a93b;
-    --status-unmastered: #9c9686;
+    --status-mastered: #6fcf7a;
+    --status-in-progress: #e0973d;
+    --status-unmastered: #8a8371;
     --status-missed: #e2685c;
-    --status-mastered-fill: rgba(111, 203, 102, 0.16);
-    --status-in-progress-fill: rgba(226, 169, 59, 0.18);
-    --status-unmastered-fill: rgba(237, 230, 217, 0.08);
+    --status-mastered-fill: rgba(111, 207, 122, 0.16);
+    --status-in-progress-fill: rgba(224, 151, 61, 0.18);
+    --status-unmastered-fill: rgba(234, 234, 234, 0.08);
     --status-missed-fill: rgba(226, 104, 92, 0.16);
 
     --error-text: #ff9187;
     --error-bg: rgba(226, 104, 92, 0.14);
     --error-border: rgba(226, 104, 92, 0.35);
     --warn-text: #f0c36b;
-    --warn-bg: rgba(226, 169, 59, 0.14);
-    --warn-border: rgba(226, 169, 59, 0.3);
+    --warn-bg: rgba(240, 195, 107, 0.14);
+    --warn-border: rgba(240, 195, 107, 0.3);
 
     --secondary: var(--bg-sidebar);
     --muted: var(--bg-sidebar);
+
+    --sidebar-foreground: var(--ink);
+    --sidebar-accent: rgba(var(--ink-rgb), 0.08);
+    --sidebar-accent-foreground: var(--ink);
+    --sidebar-border: rgba(var(--ink-rgb), 0.12);
   }
 }
 
@@ -281,10 +307,11 @@ body {
 }
 
 .hero-gradient {
-  background:
-    radial-gradient(50% 40% at 28% 0%, rgba(255, 109, 31, 0.11), transparent 70%),
-    radial-gradient(45% 35% at 88% 8%, rgba(60, 91, 122, 0.09), transparent 70%),
-    var(--bg-page);
+  background: var(--bg-page);
+}
+
+.font-brand {
+  font-family: "Avenir Next", Avenir, Montserrat, "Century Gothic", sans-serif;
 }
 
 .sheen {
