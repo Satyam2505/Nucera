@@ -47,6 +47,7 @@ import { anyRectVisible, clampZoom, rectFits, revealDelta, unionRects, type Rect
 import { STATUS_COLOR, STATUS_LABEL, type MasteryStatusKey } from "@/lib/status-colors";
 
 import { GraphUiContext, type GraphUi } from "./graph/graph-context";
+import GraphTopicList, { type TopicListItem } from "./graph/GraphTopicList";
 import GraphZoomControls from "./graph/GraphZoomControls";
 import { normalizeStatus, PATH_LABEL, PathIcon, StatusIcon } from "./graph/graph-icons";
 import PrerequisiteEdge, { GraphMarkers, type PrerequisiteEdgeData } from "./graph/PrerequisiteEdge";
@@ -181,6 +182,7 @@ function GraphCanvas({
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
   const canvasRef = useRef<HTMLDivElement>(null);
+  const mapSectionRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const movedRef = useRef(false);
   const suppressClickRef = useRef(false);
@@ -479,176 +481,206 @@ function GraphCanvas({
     return { id: n.id, name: n.name, status: n.status, score: n.score };
   };
 
+  const topicList = useMemo<TopicListItem[]>(
+    () =>
+      data.nodes.map((n) => ({
+        id: n.id,
+        name: n.name,
+        status: n.status,
+        score: n.score,
+        path: allPathStates.get(n.id) ?? "later",
+      })),
+    [data, allPathStates]
+  );
+
+  // Picking a topic from the list selects it on the map and scrolls the map
+  // back into view.
+  const selectFromList = useCallback(
+    (id: number) => {
+      selectFromPanel(id);
+      mapSectionRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+        block: "start",
+      });
+    },
+    [selectFromPanel]
+  );
+
   const canReset = customized || viewportSaved;
 
   return (
-    <div className="flex h-full min-h-[440px] flex-col">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[rgba(var(--ink-rgb),0.10)] px-4 py-2.5 text-xs md:px-6">
-        <ul className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[var(--ink)]/70" aria-label="Legend">
-          {pathMode
-            ? PATH_ORDER.map((p) => (
-                <li key={p} className="flex items-center gap-1.5">
-                  <PathIcon state={p} />
-                  {PATH_LABEL[p]}
-                </li>
-              ))
-            : LEGEND_ORDER.map((s) => (
-                <li key={s} className="flex items-center gap-1.5">
-                  <StatusIcon status={s} />
-                  {STATUS_LABEL[s]}
-                </li>
-              ))}
-        </ul>
+    <div className="flex flex-col">
+      {/* The map is a bounded block rather than the whole pane, so the page
+          keeps normal scrolling; the topic list below is the rest of the page. */}
+      <div ref={mapSectionRef} className="flex h-[clamp(440px,calc(100dvh-15rem),780px)] flex-col">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[rgba(var(--ink-rgb),0.10)] px-4 py-2.5 text-xs md:px-6">
+          <ul className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[var(--ink)]/70" aria-label="Legend">
+            {pathMode
+              ? PATH_ORDER.map((p) => (
+                  <li key={p} className="flex items-center gap-1.5">
+                    <PathIcon state={p} />
+                    {PATH_LABEL[p]}
+                  </li>
+                ))
+              : LEGEND_ORDER.map((s) => (
+                  <li key={s} className="flex items-center gap-1.5">
+                    <StatusIcon status={s} />
+                    {STATUS_LABEL[s]}
+                  </li>
+                ))}
+          </ul>
 
-        <div className="ml-auto flex items-center gap-1.5">
-          <span className="mr-2 hidden text-[11px] text-[var(--ink)]/45 xl:inline">
-            Drag cards to move · double-click a topic to focus
-          </span>
-          {focusId !== null && (
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={exitFocus}>
-              Show all
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="outline"
-            aria-pressed={pathMode}
-            onClick={() => setPathMode((v) => !v)}
-            className={`h-7 rounded-full px-3 text-xs ${
-              pathMode
-                ? "border-[var(--accent)] bg-[rgba(var(--accent-rgb),0.12)] text-[var(--accent-hover)]"
-                : "text-[var(--ink)]/70"
-            }`}
-          >
-            Learning path
-          </Button>
-          {canReset ? (
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className="mr-2 hidden text-[11px] text-[var(--ink)]/45 xl:inline">
+              Drag cards to move · double-click a topic to focus
+            </span>
+            {focusId !== null && (
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={exitFocus}>
+                Show all
+              </Button>
+            )}
             <Button
               size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-xs text-[var(--ink)]/70"
-              onClick={resetLayout}
+              variant="outline"
+              aria-pressed={pathMode}
+              onClick={() => setPathMode((v) => !v)}
+              className={`h-7 rounded-full px-3 text-xs ${
+                pathMode
+                  ? "border-[var(--accent)] bg-[rgba(var(--accent-rgb),0.12)] text-[var(--accent-hover)]"
+                  : "text-[var(--ink)]/70"
+              }`}
             >
-              Reset layout
+              Learning path
             </Button>
-          ) : (
-            <span className="flex h-7 items-center gap-1 px-2 text-[11px] text-[var(--ink)]/45">
-              <Check size={12} aria-hidden /> Default layout
-            </span>
+            {canReset ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs text-[var(--ink)]/70"
+                onClick={resetLayout}
+              >
+                Reset layout
+              </Button>
+            ) : (
+              <span className="flex h-7 items-center gap-1 px-2 text-[11px] text-[var(--ink)]/45">
+                <Check size={12} aria-hidden /> Default layout
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="relative flex min-h-0 flex-1 flex-col md:flex-row">
+          <div
+            ref={canvasRef}
+            className="relative min-h-0 min-w-0 flex-1 select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgba(var(--accent-rgb),0.45)]"
+            tabIndex={0}
+            onKeyDown={onKeyDown}
+            onDoubleClick={onCanvasDoubleClick}
+            aria-label="Knowledge graph. Drag cards to rearrange and drag the background to pan. Use the zoom controls to zoom, F to fit, and Escape to clear selection."
+          >
+            <GraphMarkers />
+            <GraphUiContext.Provider value={ui}>
+              {/*
+                Interaction model:
+                - plain mouse wheel / two-finger scroll: NOT handled here, so the
+                  page scrolls. preventScrolling={false} stops React Flow from
+                  calling preventDefault() on ordinary wheel events (its default
+                  does, even with zoomOnScroll off, which trapped page scrolling).
+                - trackpad pinch: browsers deliver it as a wheel event with
+                  ctrlKey set; zoomOnPinch keeps handling exactly those events.
+                - empty-canvas drag pans, card drag moves, zoom via the controls.
+              */}
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                onNodesChange={onNodesChange}
+                onNodeClick={onNodeClick}
+                onNodeDoubleClick={onNodeDoubleClick}
+                onNodeDragStart={onNodeDragStart}
+                onNodeDrag={onNodeDrag}
+                onNodeDragStop={onNodeDragStop}
+                onNodeMouseEnter={(_, n) => {
+                  if (!draggingRef.current) setHoveredId(Number(n.id));
+                }}
+                onNodeMouseLeave={() => {
+                  if (!draggingRef.current) setHoveredId(null);
+                }}
+                onPaneClick={() => setSelectedId(null)}
+                onMoveEnd={onMoveEnd}
+                nodesDraggable
+                nodesConnectable={false}
+                edgesUpdatable={false}
+                edgesFocusable={false}
+                elementsSelectable={false}
+                selectNodesOnDrag={false}
+                deleteKeyCode={null}
+                selectionKeyCode={null}
+                multiSelectionKeyCode={null}
+                nodeDragThreshold={3}
+                panOnDrag
+                panOnScroll={false}
+                zoomOnScroll={false}
+                zoomOnPinch
+                zoomOnDoubleClick={false}
+                preventScrolling={false}
+                minZoom={MIN_ZOOM}
+                maxZoom={MAX_ZOOM}
+                defaultViewport={initialViewport ?? undefined}
+                fitView={initialViewport === null}
+                fitViewOptions={FIT_OPTIONS}
+              >
+                <Background color="rgba(var(--ink-rgb), 0.14)" gap={20} />
+                <Panel position="bottom-left" className="!m-3">
+                  <GraphZoomControls
+                    min={MIN_ZOOM}
+                    max={MAX_ZOOM}
+                    step={ZOOM_STEP}
+                    duration={duration(ANIM_MS)}
+                    onFit={fitAll}
+                    onZoomed={() => commitView("persist", duration(ANIM_MS))}
+                  />
+                </Panel>
+                {nodes.length >= MINIMAP_THRESHOLD && (
+                  <MiniMap
+                    pannable
+                    zoomable={false}
+                    className="!hidden md:!block"
+                    nodeColor={(n) => STATUS_COLOR[normalizeStatus((n.data as TopicNodeData).status)]}
+                    nodeStrokeWidth={0}
+                    maskColor="rgba(var(--ink-rgb), 0.08)"
+                    style={{
+                      background: "var(--bg-surface)",
+                      border: "1px solid rgba(var(--ink-rgb), 0.12)",
+                      borderRadius: 8,
+                    }}
+                  />
+                )}
+              </ReactFlow>
+            </GraphUiContext.Provider>
+          </div>
+
+          {selected && selectedId !== null && (
+            <TopicDetailPanel
+              topic={toPanel(selectedId)}
+              pathState={allPathStates.get(selectedId) ?? "later"}
+              prerequisites={(model.prereqs.get(selectedId) ?? []).map(toPanel)}
+              unlocks={(model.dependents.get(selectedId) ?? []).map(toPanel)}
+              totalBefore={ancestors(model, selectedId).size}
+              totalAfter={descendants(model, selectedId).size}
+              isFocused={focusId === selectedId}
+              onClose={clearAll}
+              onSelectTopic={selectFromPanel}
+              onFocus={() => enterFocus(selectedId)}
+              onShowAll={exitFocus}
+              onAsk={() => onOpenTopic?.(selectedId, "chat")}
+              onQuiz={() => onOpenTopic?.(selectedId, "quiz")}
+            />
           )}
         </div>
       </div>
-
-      <div className="relative flex min-h-0 flex-1 flex-col md:flex-row">
-        <div
-          ref={canvasRef}
-          className="relative min-h-0 min-w-0 flex-1 select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgba(var(--accent-rgb),0.45)]"
-          tabIndex={0}
-          onKeyDown={onKeyDown}
-          onDoubleClick={onCanvasDoubleClick}
-          aria-label="Prerequisite graph. Drag cards to rearrange and drag the background to pan. Use the zoom controls to zoom, F to fit, and Escape to clear selection."
-        >
-          <GraphMarkers />
-          <GraphUiContext.Provider value={ui}>
-            {/*
-              Interaction model:
-              - plain mouse wheel / two-finger scroll: NOT handled here, so the
-                page scrolls. preventScrolling={false} stops React Flow from
-                calling preventDefault() on ordinary wheel events (its default
-                does, even with zoomOnScroll off, which trapped page scrolling).
-              - trackpad pinch: browsers deliver it as a wheel event with
-                ctrlKey set; zoomOnPinch keeps handling exactly those events.
-              - empty-canvas drag pans, card drag moves, zoom via the controls.
-            */}
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              nodeTypes={nodeTypes}
-              edgeTypes={edgeTypes}
-              onNodesChange={onNodesChange}
-              onNodeClick={onNodeClick}
-              onNodeDoubleClick={onNodeDoubleClick}
-              onNodeDragStart={onNodeDragStart}
-              onNodeDrag={onNodeDrag}
-              onNodeDragStop={onNodeDragStop}
-              onNodeMouseEnter={(_, n) => {
-                if (!draggingRef.current) setHoveredId(Number(n.id));
-              }}
-              onNodeMouseLeave={() => {
-                if (!draggingRef.current) setHoveredId(null);
-              }}
-              onPaneClick={() => setSelectedId(null)}
-              onMoveEnd={onMoveEnd}
-              nodesDraggable
-              nodesConnectable={false}
-              edgesUpdatable={false}
-              edgesFocusable={false}
-              elementsSelectable={false}
-              selectNodesOnDrag={false}
-              deleteKeyCode={null}
-              selectionKeyCode={null}
-              multiSelectionKeyCode={null}
-              nodeDragThreshold={3}
-              panOnDrag
-              panOnScroll={false}
-              zoomOnScroll={false}
-              zoomOnPinch
-              zoomOnDoubleClick={false}
-              preventScrolling={false}
-              minZoom={MIN_ZOOM}
-              maxZoom={MAX_ZOOM}
-              defaultViewport={initialViewport ?? undefined}
-              fitView={initialViewport === null}
-              fitViewOptions={FIT_OPTIONS}
-            >
-              <Background color="rgba(var(--ink-rgb), 0.14)" gap={20} />
-              <Panel position="bottom-left" className="!m-3">
-                <GraphZoomControls
-                  min={MIN_ZOOM}
-                  max={MAX_ZOOM}
-                  step={ZOOM_STEP}
-                  duration={duration(ANIM_MS)}
-                  onFit={fitAll}
-                  onZoomed={() => commitView("persist", duration(ANIM_MS))}
-                />
-              </Panel>
-              {nodes.length >= MINIMAP_THRESHOLD && (
-                <MiniMap
-                  pannable
-                  zoomable={false}
-                  className="!hidden md:!block"
-                  nodeColor={(n) => STATUS_COLOR[normalizeStatus((n.data as TopicNodeData).status)]}
-                  nodeStrokeWidth={0}
-                  maskColor="rgba(var(--ink-rgb), 0.08)"
-                  style={{
-                    background: "var(--bg-surface)",
-                    border: "1px solid rgba(var(--ink-rgb), 0.12)",
-                    borderRadius: 8,
-                  }}
-                />
-              )}
-            </ReactFlow>
-          </GraphUiContext.Provider>
-        </div>
-
-        {selected && selectedId !== null && (
-          <TopicDetailPanel
-            topic={toPanel(selectedId)}
-            pathState={allPathStates.get(selectedId) ?? "later"}
-            prerequisites={(model.prereqs.get(selectedId) ?? []).map(toPanel)}
-            unlocks={(model.dependents.get(selectedId) ?? []).map(toPanel)}
-            totalBefore={ancestors(model, selectedId).size}
-            totalAfter={descendants(model, selectedId).size}
-            isFocused={focusId === selectedId}
-            onClose={clearAll}
-            onSelectTopic={selectFromPanel}
-            onFocus={() => enterFocus(selectedId)}
-            onShowAll={exitFocus}
-            onAsk={() => onOpenTopic?.(selectedId, "chat")}
-            onQuiz={() => onOpenTopic?.(selectedId, "quiz")}
-          />
-        )}
-      </div>
+      <GraphTopicList topics={topicList} selectedId={selectedId} onSelect={selectFromList} />
     </div>
   );
 }
