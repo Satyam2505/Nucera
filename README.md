@@ -1,4 +1,4 @@
-# EduPilot AI — local scaffold (non-RAG)
+# Nucera — local scaffold (non-RAG)
 
 Personal, solo-use adaptive tutor scaffold. Tracks topics, prerequisite
 relationships, mastery, and study sessions. The tutor's answers and quiz
@@ -9,12 +9,18 @@ else.
 
 ## Stack
 
-- Backend: FastAPI + SQLAlchemy + Alembic, PostgreSQL
-- Graph: NetworkX (rebuilt from Postgres on each request)
-- Frontend: Next.js (App Router) + Tailwind CSS + react-flow
-- No auth — single user
+- Backend: FastAPI + SQLAlchemy + Alembic, SQLite by default (PostgreSQL optional)
+- Graph: NetworkX (rebuilt from the database on each request)
+- Frontend: Next.js (App Router) + Tailwind CSS + shadcn/ui + React Flow
+- Auth: email + password (JWT); every account's courses and progress are separate
 
-## 1. Start Postgres
+## 1. Database
+
+Nothing to start: Nucera uses a local SQLite file (`backend/dev.db`) by
+default.
+
+To use PostgreSQL instead, start it and point `DATABASE_URL` at it (see
+`backend/.env.example`):
 
 ```
 docker compose up -d
@@ -54,7 +60,7 @@ App runs at http://localhost:3000.
 ## Pages
 
 - `/` — Progress dashboard (mastery per topic, mark a topic missed)
-- `/graph` — Prerequisite graph, nodes colored by mastery status
+- `/graph` — Knowledge graph (topics and their prerequisites), nodes colored by mastery status
 - `/upload` — Add study material (paste text or upload a file) for a topic
 - `/tutor` — Ask a question about a topic; see the stubbed answer plus any
   flagged unmastered prerequisites

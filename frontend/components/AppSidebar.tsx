@@ -53,17 +53,20 @@ export default function AppSidebar({
 }) {
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-      <SidebarHeader className="flex-row items-center justify-between px-4 py-4 group-data-[collapsible=icon]:px-2">
-        <span className="text-base font-semibold tracking-tight text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-          EduPilot <span className="text-[var(--accent)]">AI</span>
+      <SidebarHeader className="flex-row items-center justify-between px-4 py-4 gap-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2">
+        <span className="flex items-center gap-2 min-w-0">
+          <img src="/nucera-mark.svg" alt="" className="h-6 w-6 shrink-0" />
+          <span className="text-base font-semibold tracking-tight text-sidebar-foreground truncate group-data-[collapsible=icon]:hidden">
+            nucera
+          </span>
         </span>
         <div className="flex items-center gap-1 group-data-[collapsible=icon]:hidden">
           <ThemeToggle />
           <SidebarTrigger className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent" />
         </div>
-        {/* Icon rail is too narrow (3rem) for both icons side by side, so
-            collapsed mode drops the toggle up here and shows it again,
-            centered, down by the footer instead (see below). */}
+        {/* Icon rail is too narrow (3rem) for the logo mark and toggle
+            side by side, so collapsed mode stacks the trigger below the
+            mark instead (the row above becomes a column via flex-col). */}
         <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent" />
       </SidebarHeader>
 
@@ -105,7 +108,7 @@ export default function AppSidebar({
                 const badge = badgeColorFor(course.name);
                 return (
                   <SidebarMenuItem key={course.name}>
-                    <SidebarMenuButton asChild tooltip={course.name}>
+                    <SidebarMenuButton asChild tooltip={course.name} className="group-data-[collapsible=icon]:p-1!">
                       <Link href={`/course/${encodeURIComponent(course.name)}`}>
                         <span
                           className="h-6 w-6 rounded-md border flex items-center justify-center text-[10px] font-semibold shrink-0"

@@ -38,9 +38,10 @@ export default function AuthForm() {
     <div className="flex h-screen items-center justify-center hero-gradient px-4">
       <Card className="w-full max-w-sm bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.12)] shadow-lg">
         <CardHeader>
-          <h1 className="text-lg font-semibold tracking-tight text-[var(--ink)]">
-            EduPilot <span className="text-[var(--accent)]">AI</span>
-          </h1>
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <img src="/nucera-mark.svg" alt="" className="h-8 w-8" />
+            <h1 className="text-lg font-semibold tracking-tight text-[var(--ink)]">nucera</h1>
+          </div>
           <p className="text-sm text-stone-500 dark:text-stone-400">
             {mode === "login" ? "Log in to your courses." : "Create an account to get started."}
           </p>

@@ -5,11 +5,11 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: edupilot
+      POSTGRES_DB: nucera
     ports:
       - "5432:5432"
     volumes:
-      - edupilot_pgdata:/var/lib/postgresql/data
+      - nucera_pgdata:/var/lib/postgresql/data
 
 volumes:
-  edupilot_pgdata:
+  nucera_pgdata:

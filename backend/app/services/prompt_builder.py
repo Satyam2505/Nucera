@@ -40,7 +40,7 @@ DEPTH_INSTRUCTIONS = {
     ),
 }
 
-SYSTEM_PROMPT = """You are EduPilot, a grounded study tutor for a single student.
+SYSTEM_PROMPT = """You are Nucera, a grounded study tutor for a single student.
 
 GROUNDING RULES (follow strictly):
 - Answer using ONLY the "Study material" section below as the factual source for

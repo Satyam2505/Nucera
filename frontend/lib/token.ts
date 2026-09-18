@@ -1,4 +1,4 @@
-const TOKEN_KEY = "edupilot-token";
+const TOKEN_KEY = "nucera-token";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import auth, ingestion, mastery, quiz, retrieval, topics, tutor
 
-app = FastAPI(title="EduPilot AI", version="0.1.0")
+app = FastAPI(title="Nucera", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,7 +26,7 @@ app.include_router(retrieval.router)
 
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "EduPilot AI backend"}
+    return {"status": "ok", "service": "Nucera backend"}
 
 
 @app.get("/health")

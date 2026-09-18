@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#8CBFFF"/>
+    <stop offset=".55" stop-color="#A6A4F6"/>
+    <stop offset="1" stop-color="#C6A8F5"/>
+  </linearGradient>
+  <linearGradient id="g2" x1="0" y1="1" x2="1" y2="0">
+    <stop offset="0" stop-color="#4F70DB"/>
+    <stop offset="1" stop-color="#A8C7FF"/>
+  </linearGradient>
+  <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#8DC7FF"/>
+    <stop offset=".55" stop-color="#9DA8F7"/>
+    <stop offset="1" stop-color="#7C70E6"/>
+  </linearGradient>
+  <radialGradient id="orb">
+    <stop offset="0" stop-color="#B7A8FF"/>
+    <stop offset="1" stop-color="#8EC5FF"/>
+  </radialGradient>
+</defs>
+
+<rect width="1200" height="1200" fill="white"/>
+
+<!-- Lotus icon -->
+<g transform="translate(0,-20)">
+  <circle cx="600" cy="285" r="31" fill="url(#orb)"/>
+  <path d="M600 345 C530 410 495 500 600 675 C705 500 670 410 600 345Z" fill="url(#g3)" opacity=".92"/>
+  <path d="M535 410 C455 365 395 360 410 475 C425 565 505 625 600 675 C555 575 535 495 535 410Z" fill="url(#g1)" opacity=".50"/>
+  <path d="M665 410 C745 365 805 360 790 475 C775 565 695 625 600 675 C645 575 665 495 665 410Z" fill="url(#g1)" opacity=".50"/>
+  <path d="M410 470 C325 445 285 455 320 525 C365 610 475 660 600 675 C520 575 465 505 410 470Z" fill="url(#g2)" opacity=".83"/>
+  <path d="M790 470 C875 445 915 455 880 525 C835 610 725 660 600 675 C680 575 735 505 790 470Z" fill="url(#g2)" opacity=".83"/>
+</g>
+
+<!-- Wordmark -->
+<text x="600" y="835" text-anchor="middle"
+      font-family="Avenir Next, Avenir, Montserrat, Century Gothic, sans-serif"
+      font-size="148" font-weight="500" letter-spacing="-5"
+      fill="#141C2F">nucera</text>
+
+<!-- Tagline -->
+<text x="600" y="930" text-anchor="middle"
+      font-family="Avenir Next, Avenir, Montserrat, Century Gothic, sans-serif"
+      font-size="43" font-weight="400" letter-spacing="5"
+      fill="#73788F">Learn what comes next.</text>
+</svg>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-const STORAGE_KEY = "edupilot-theme";
+const STORAGE_KEY = "nucera-theme";
 
 export function useTheme() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
