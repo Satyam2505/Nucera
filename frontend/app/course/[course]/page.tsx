@@ -9,10 +9,19 @@ import GraphView from "@/components/course/GraphView";
 import MasteryView from "@/components/course/MasteryView";
 import QuizView from "@/components/course/QuizView";
 import SourcesView from "@/components/course/SourcesView";
+import { Button } from "@/components/ui/button";
 import UploadModal from "@/components/UploadModal";
 import { api } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
 import { STATUS_COLOR, type MasteryStatusKey } from "@/lib/status-colors";
+
+function HomeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 function BookmarkIcon({ filled }: { filled: boolean }) {
   return (
@@ -53,7 +62,7 @@ const VIEWS: { key: ViewKey; label: string; icon: ReactNode }[] = [
   },
   {
     key: "graph",
-    label: "Prerequisite graph",
+    label: "Knowledge graph",
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="6" cy="6" r="3" />
@@ -138,17 +147,18 @@ export default function CourseWorkspace() {
           >
             <ListIcon />
           </button>
-          <Link href="/" className="text-sm text-stone-500 dark:text-stone-400 hover:text-[var(--ink)] transition shrink-0">
-            ← Library
-          </Link>
+          <Button
+            variant="ghost"
+            size="icon"
+            asChild
+            className="shrink-0 text-stone-500 dark:text-stone-400 hover:text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.08)]"
+          >
+            <Link href="/" aria-label="Home" title="Home">
+              <HomeIcon />
+            </Link>
+          </Button>
           <h1 className="text-base font-semibold text-[var(--ink)] truncate">{courseName}</h1>
         </div>
-        <button
-          onClick={() => setShowUpload(true)}
-          className="text-xs font-medium px-3.5 py-1.5 rounded-full border border-[rgba(var(--accent-rgb),0.50)] text-[var(--accent-hover)] hover:bg-[rgba(var(--accent-rgb),0.10)] transition shrink-0"
-        >
-          + Add source
-        </button>
       </header>
 
       <div className="flex min-h-0 flex-1 overflow-hidden relative">
