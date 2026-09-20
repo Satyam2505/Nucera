@@ -40,7 +40,7 @@ export default function AuthForm() {
         <CardHeader>
           <div className="flex items-center justify-center gap-2 mb-1">
             <img src="/nucera-mark.svg" alt="" className="h-8 w-8" />
-            <h1 className="text-lg font-semibold tracking-tight text-[var(--ink)]">nucera</h1>
+            <h1 className="font-brand text-xl font-semibold tracking-tight text-[var(--ink)]">nucera</h1>
           </div>
           <p className="text-sm text-stone-500 dark:text-stone-400">
             {mode === "login" ? "Log in to your courses." : "Create an account to get started."}

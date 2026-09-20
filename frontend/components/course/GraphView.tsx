@@ -544,7 +544,7 @@ function GraphCanvas({
               variant="outline"
               aria-pressed={pathMode}
               onClick={() => setPathMode((v) => !v)}
-              className={`h-7 rounded-full px-3 text-xs ${
+              className={`h-7 rounded-lg px-3 text-xs ${
                 pathMode
                   ? "border-[var(--accent)] bg-[rgba(var(--accent-rgb),0.12)] text-[var(--accent-hover)]"
                   : "text-[var(--ink)]/70"

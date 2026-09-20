@@ -19,7 +19,7 @@ interface Props {
 }
 
 const buttonClass =
-  "inline-flex h-7 items-center justify-center rounded-full text-[var(--ink)]/70 transition-colors " +
+  "inline-flex h-7 items-center justify-center rounded-md text-[var(--ink)]/70 transition-colors " +
   "hover:bg-[rgba(var(--accent-rgb),0.14)] hover:text-[var(--accent-hover)] " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--accent-rgb),0.5)] " +
   "disabled:pointer-events-none disabled:opacity-35";
@@ -71,7 +71,7 @@ export default function GraphZoomControls({ min, max, step, duration, onFit, onZ
 
   return (
     <div
-      className="nopan nowheel flex items-center gap-0.5 rounded-full border border-[rgba(var(--ink-rgb),0.12)] bg-[var(--bg-surface)] p-1 shadow-sm"
+      className="nopan nowheel flex items-center gap-0.5 rounded-xl border border-[rgba(var(--ink-rgb),0.12)] bg-[var(--bg-surface)] p-1 shadow-sm"
       role="group"
       aria-label="Graph zoom"
     >

@@ -93,7 +93,7 @@
   --border: rgba(var(--ink-rgb), 0.12);
   --input: rgba(var(--ink-rgb), 0.12);
   --ring: var(--accent);
-  --radius: 0.75rem;
+  --radius: 0.5rem;
 
   /* shadcn's Sidebar block reads its own dedicated set of vars rather
      than the generic ones above. --bg-sidebar is a dark navy rail in both
@@ -111,95 +111,124 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* Neutral charcoal grey, anchored on the two exact tones the user
-     picked (page/base at #1f2020, surface/linen at #404040) rather than
-     another invented color story — flat and understated on purpose. */
-  --bg-page: #1f2020;
-  --bg-sidebar: #151616;
-  --bg-surface: #2b2c2c;
-  --bg-linen: #404040;
+  /* LabTutor dark palette: navy/slate-black rather than pure black, muted
+     everywhere except one loud blue accent. The sidebar is the deepest
+     step (#030712), page next, then surface (cards/modals) and the
+     raised "linen" step used for inputs and hover states. */
+  --bg-page: #0b0f19;
+  --bg-sidebar: #030712;
+  --bg-surface: #111827;
+  --bg-linen: #1f2937;
 
-  --ink: #eaeaea;
-  --ink-rgb: 234, 234, 234;
+  --ink: #f9fafb;
+  --ink-rgb: 249, 250, 251;
 
-  --accent: #6d8dfd;
-  --accent-rgb: 109, 141, 253;
-  --accent-hover: #8aa3ff;
-  --accent-ink: #14161f;
+  --accent: #3b82f6;
+  --accent-rgb: 59, 130, 246;
+  --accent-hover: #60a5fa;
+  --accent-ink: #ffffff;
 
-  --status-mastered: #6fcf7a;
-  --status-in-progress: #e0973d;
-  --status-unmastered: #8a8371;
-  --status-missed: #e2685c;
-  --status-mastered-fill: rgba(111, 207, 122, 0.16);
-  --status-in-progress-fill: rgba(224, 151, 61, 0.18);
-  --status-unmastered-fill: rgba(234, 234, 234, 0.08);
-  --status-missed-fill: rgba(226, 104, 92, 0.16);
+  /* Status colors double as success / warn / danger. The "fill" tokens are
+     the palette's solid "weak" chip backgrounds, so meaning carries without
+     a harsh glare. */
+  --status-mastered: #22c55e;
+  --status-in-progress: #f59e0b;
+  --status-unmastered: #9ca3af;
+  --status-missed: #ef4444;
+  --status-mastered-fill: #14532d;
+  --status-in-progress-fill: #451a03;
+  --status-unmastered-fill: #1f2937;
+  --status-missed-fill: #450a0a;
 
-  --error-text: #ff9187;
-  --error-bg: rgba(226, 104, 92, 0.14);
-  --error-border: rgba(226, 104, 92, 0.35);
-  --warn-text: #f0c36b;
-  --warn-bg: rgba(240, 195, 107, 0.14);
-  --warn-border: rgba(240, 195, 107, 0.3);
+  --error-text: #ef4444;
+  --error-bg: #450a0a;
+  --error-border: rgba(239, 68, 68, 0.35);
+  --warn-text: #f59e0b;
+  --warn-bg: #451a03;
+  --warn-border: rgba(245, 158, 11, 0.3);
 
-  /* Unlike light mode, dark mode's secondary/muted still read fine as a
-     recessed dark tone, so these keep aliasing bg-sidebar here. */
-  --secondary: var(--bg-sidebar);
-  --muted: var(--bg-sidebar);
+  /* shadcn slots: borders/inputs use the palette's single border tone, and
+     secondary/muted/hover use the raised surface step. */
+  --border: #1f2937;
+  --input: #1f2937;
+  --secondary: var(--bg-linen);
+  --muted: var(--bg-linen);
+  --shadcn-accent-bg: #1f2937;
 
-  /* The sidebar is dark in both themes, but light mode's sidebar sits on
-     a cool navy while --ink there is dark (for the light main content) —
-     so those tokens are hardcoded cool-white at the base :root level.
-     Here in dark mode --ink is already a warm off-white appropriate for
-     the (also dark) sidebar, so these just alias it instead of repeating
-     a separate literal. */
+  /* The sidebar keeps its own tones: item hover on the surface step, dividers
+     on the shared border tone. */
   --sidebar-foreground: var(--ink);
-  --sidebar-accent: rgba(var(--ink-rgb), 0.08);
+  --sidebar-accent: #111827;
   --sidebar-accent-foreground: var(--ink);
-  --sidebar-border: rgba(var(--ink-rgb), 0.12);
+  --sidebar-border: #1f2937;
+
+  /* Tailwind's default stone grays are warm; dark mode's secondary text
+     (text-stone-400 etc.) should be the palette's cool muted grays. */
+  --color-stone-300: #d1d5db;
+  --color-stone-400: #9ca3af;
+  --color-stone-500: #6b7280;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --bg-page: #1f2020;
-    --bg-sidebar: #151616;
-    --bg-surface: #2b2c2c;
-    --bg-linen: #404040;
+    /* LabTutor dark palette: navy/slate-black rather than pure black, muted
+       everywhere except one loud blue accent. The sidebar is the deepest
+       step (#030712), page next, then surface (cards/modals) and the
+       raised "linen" step used for inputs and hover states. */
+    --bg-page: #0b0f19;
+    --bg-sidebar: #030712;
+    --bg-surface: #111827;
+    --bg-linen: #1f2937;
 
-    --ink: #eaeaea;
-    --ink-rgb: 234, 234, 234;
+    --ink: #f9fafb;
+    --ink-rgb: 249, 250, 251;
 
-    --accent: #6d8dfd;
-    --accent-rgb: 109, 141, 253;
-    --accent-hover: #8aa3ff;
-    --accent-ink: #14161f;
+    --accent: #3b82f6;
+    --accent-rgb: 59, 130, 246;
+    --accent-hover: #60a5fa;
+    --accent-ink: #ffffff;
 
-    --status-mastered: #6fcf7a;
-    --status-in-progress: #e0973d;
-    --status-unmastered: #8a8371;
-    --status-missed: #e2685c;
-    --status-mastered-fill: rgba(111, 207, 122, 0.16);
-    --status-in-progress-fill: rgba(224, 151, 61, 0.18);
-    --status-unmastered-fill: rgba(234, 234, 234, 0.08);
-    --status-missed-fill: rgba(226, 104, 92, 0.16);
+    /* Status colors double as success / warn / danger. The "fill" tokens are
+       the palette's solid "weak" chip backgrounds, so meaning carries without
+       a harsh glare. */
+    --status-mastered: #22c55e;
+    --status-in-progress: #f59e0b;
+    --status-unmastered: #9ca3af;
+    --status-missed: #ef4444;
+    --status-mastered-fill: #14532d;
+    --status-in-progress-fill: #451a03;
+    --status-unmastered-fill: #1f2937;
+    --status-missed-fill: #450a0a;
 
-    --error-text: #ff9187;
-    --error-bg: rgba(226, 104, 92, 0.14);
-    --error-border: rgba(226, 104, 92, 0.35);
-    --warn-text: #f0c36b;
-    --warn-bg: rgba(240, 195, 107, 0.14);
-    --warn-border: rgba(240, 195, 107, 0.3);
+    --error-text: #ef4444;
+    --error-bg: #450a0a;
+    --error-border: rgba(239, 68, 68, 0.35);
+    --warn-text: #f59e0b;
+    --warn-bg: #451a03;
+    --warn-border: rgba(245, 158, 11, 0.3);
 
-    --secondary: var(--bg-sidebar);
-    --muted: var(--bg-sidebar);
+    /* shadcn slots: borders/inputs use the palette's single border tone, and
+       secondary/muted/hover use the raised surface step. */
+    --border: #1f2937;
+    --input: #1f2937;
+    --secondary: var(--bg-linen);
+    --muted: var(--bg-linen);
+    --shadcn-accent-bg: #1f2937;
 
+    /* The sidebar keeps its own tones: item hover on the surface step, dividers
+       on the shared border tone. */
     --sidebar-foreground: var(--ink);
-    --sidebar-accent: rgba(var(--ink-rgb), 0.08);
+    --sidebar-accent: #111827;
     --sidebar-accent-foreground: var(--ink);
-    --sidebar-border: rgba(var(--ink-rgb), 0.12);
+    --sidebar-border: #1f2937;
+
+    /* Tailwind's default stone grays are warm; dark mode's secondary text
+       (text-stone-400 etc.) should be the palette's cool muted grays. */
+    --color-stone-300: #d1d5db;
+    --color-stone-400: #9ca3af;
+    --color-stone-500: #6b7280;
   }
 }
 
@@ -254,7 +283,7 @@ body {
 }
 
 ::selection {
-  background: rgba(255, 109, 31, 0.25);
+  background: rgba(var(--accent-rgb), 0.3);
 }
 
 * {

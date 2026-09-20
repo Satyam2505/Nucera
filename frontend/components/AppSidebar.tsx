@@ -56,7 +56,7 @@ export default function AppSidebar({
       <SidebarHeader className="flex-row items-center justify-between px-4 py-4 gap-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2">
         <span className="flex items-center gap-2 min-w-0">
           <img src="/nucera-mark.svg" alt="" className="h-6 w-6 shrink-0" />
-          <span className="text-base font-semibold tracking-tight text-sidebar-foreground truncate group-data-[collapsible=icon]:hidden">
+          <span className="font-brand text-base font-semibold tracking-tight text-sidebar-foreground truncate group-data-[collapsible=icon]:hidden">
             nucera
           </span>
         </span>

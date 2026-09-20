@@ -226,7 +226,7 @@ export default function CourseWorkspace() {
               <button
                 key={v.key}
                 onClick={() => setView(v.key)}
-                className={`flex items-center gap-1.5 text-xs font-medium px-3.5 py-2 rounded-full transition shrink-0 ${
+                className={`flex items-center gap-1.5 text-xs font-medium px-3.5 py-2 rounded-lg transition shrink-0 ${
                   view === v.key
                     ? "bg-[var(--accent)] text-[var(--accent-ink)] accent-ring"
                     : "text-stone-600 dark:text-stone-400 hover:text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.05)]"
