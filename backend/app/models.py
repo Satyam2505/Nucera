@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import relationship
@@ -45,6 +46,56 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     topics = relationship("Topic", back_populates="owner")
+    courses = relationship("Course", back_populates="owner", cascade="all, delete-orphan")
+
+
+class Course(Base):
+    """The top of the Course -> Module -> Topic hierarchy (the "book").
+
+    user_id is nullable only because courses backfilled from pre-auth
+    topics (and the unowned seed) have no real owner; such a course is
+    invisible to every account rather than being handed to a made-up one.
+    """
+
+    __tablename__ = "courses"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_courses_user_name"),)
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    owner = relationship("User", back_populates="courses")
+    modules = relationship(
+        "Module",
+        back_populates="course",
+        cascade="all, delete-orphan",
+        order_by="Module.position",
+    )
+
+
+class Module(Base):
+    """A chapter of a course. `position` orders modules within the course."""
+
+    __tablename__ = "modules"
+
+    id = Column(Integer, primary_key=True)
+    course_id = Column(
+        Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    position = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    course = relationship("Course", back_populates="modules")
+    topics = relationship(
+        "Topic",
+        back_populates="module",
+        cascade="all, delete-orphan",
+        order_by="Topic.position",
+    )
 
 
 class Topic(Base):
@@ -52,12 +103,17 @@ class Topic(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    module_id = Column(
+        Integer, ForeignKey("modules.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     name = Column(String(255), nullable=False)
-    course = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
+    # Order within the module (0-based, kept contiguous by the API).
+    position = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     owner = relationship("User", back_populates="topics")
+    module = relationship("Module", back_populates="topics")
 
     mastery = relationship(
         "Mastery", back_populates="topic", uselist=False, cascade="all, delete-orphan"
