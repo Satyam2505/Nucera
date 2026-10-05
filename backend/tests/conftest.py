@@ -71,7 +71,29 @@ def client():
     )
     token = login.json()["access_token"]
     test_client.headers.update({"Authorization": f"Bearer {token}"})
+    # Handy for tests that call services directly with the same user.
+    test_client.user_id = test_client.get("/auth/me").json()["id"]
     return test_client
+
+
+@pytest.fixture()
+def other_client():
+    """A second, independent authenticated user (for cross-user isolation tests)."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    other = TestClient(app)
+    other.post(
+        "/auth/register", json={"email": "other-user@example.com", "password": "testpassword123"}
+    )
+    login = other.post(
+        "/auth/login",
+        data={"username": "other-user@example.com", "password": "testpassword123"},
+    )
+    other.headers.update({"Authorization": f"Bearer {login.json()['access_token']}"})
+    other.user_id = other.get("/auth/me").json()["id"]
+    return other
 
 
 @pytest.fixture()

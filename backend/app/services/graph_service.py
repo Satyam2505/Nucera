@@ -6,32 +6,32 @@ from sqlalchemy.orm import Query, Session, contains_eager
 from app.models import Course, Mastery, MasteryStatus, Module, Prerequisite, Topic
 
 
-def topic_query(db: Session, user_id: Optional[int], course_id: Optional[int] = None) -> Query:
-    """Topics in reading order (course, module, position), optionally limited
-    to one user's courses and/or a single course. Ownership resolves through
-    course.user_id, matching app/ownership.py.
+def topic_query(db: Session, user_id: int, course_id: Optional[int] = None) -> Query:
+    """One user's topics in reading order (course, module, position),
+    optionally limited to a single course. Ownership resolves through
+    course.user_id, matching app/ownership.py. user_id is required so a
+    caller can't read across accounts by leaving it out.
     """
     query = (
         db.query(Topic)
         .join(Module, Topic.module_id == Module.id)
         .join(Course, Module.course_id == Course.id)
         .options(contains_eager(Topic.module).contains_eager(Module.course))
+        .filter(Course.user_id == user_id)
         .order_by(Course.id, Module.position, Topic.position)
     )
-    if user_id is not None:
-        query = query.filter(Course.user_id == user_id)
     if course_id is not None:
         query = query.filter(Course.id == course_id)
     return query
 
 
-def build_graph(db: Session, user_id: Optional[int] = None) -> nx.DiGraph:
+def build_graph(db: Session, user_id: int) -> nx.DiGraph:
     """Reconstruct the prerequisite DiGraph from the database.
 
     Edges point from prerequisite_topic_id -> topic_id (i.e. "must be
     learned before"), so descendants of a node are the topics that depend
-    on it. When user_id is given, only that user's topics (and the
-    prerequisite edges between them) are included.
+    on it. Only that user's topics (and the prerequisite edges between
+    them) are included.
     """
     graph = nx.DiGraph()
 
@@ -41,17 +41,15 @@ def build_graph(db: Session, user_id: Optional[int] = None) -> nx.DiGraph:
         topic_ids.add(topic.id)
 
     for prereq in db.query(Prerequisite).all():
-        if user_id is not None and (
-            prereq.prerequisite_topic_id not in topic_ids or prereq.topic_id not in topic_ids
-        ):
+        if prereq.prerequisite_topic_id not in topic_ids or prereq.topic_id not in topic_ids:
             continue
         graph.add_edge(prereq.prerequisite_topic_id, prereq.topic_id)
 
     return graph
 
 
-def get_unmastered_prerequisites(db: Session, topic_id: int) -> list[Topic]:
-    graph = build_graph(db)
+def get_unmastered_prerequisites(db: Session, topic_id: int, user_id: int) -> list[Topic]:
+    graph = build_graph(db, user_id)
     if topic_id not in graph:
         return []
 
@@ -74,7 +72,7 @@ def get_unmastered_prerequisites(db: Session, topic_id: int) -> list[Topic]:
     return db.query(Topic).filter(Topic.id.in_(unmastered_ids)).all()
 
 
-def get_topic_order(db: Session, user_id: Optional[int] = None) -> list[Topic]:
+def get_topic_order(db: Session, user_id: int) -> list[Topic]:
     graph = build_graph(db, user_id=user_id)
     try:
         ordered_ids = list(nx.topological_sort(graph))
@@ -85,9 +83,7 @@ def get_topic_order(db: Session, user_id: Optional[int] = None) -> list[Topic]:
     return [topics_by_id[tid] for tid in ordered_ids if tid in topics_by_id]
 
 
-def get_graph_json(
-    db: Session, user_id: Optional[int] = None, course_id: Optional[int] = None
-) -> dict:
+def get_graph_json(db: Session, user_id: int, course_id: Optional[int] = None) -> dict:
     topics = topic_query(db, user_id, course_id).all()
     topic_ids = {t.id for t in topics}
 

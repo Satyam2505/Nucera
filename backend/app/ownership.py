@@ -46,3 +46,17 @@ def get_owned_topic(db: Session, topic_id: int, user: models.User) -> models.Top
     if topic is None:
         raise HTTPException(status_code=404, detail="Topic not found")
     return topic
+
+
+def get_owned_source(db: Session, source_id: int, user: models.User) -> models.Source:
+    source = (
+        db.query(models.Source)
+        .join(models.Topic, models.Source.topic_id == models.Topic.id)
+        .join(models.Module, models.Topic.module_id == models.Module.id)
+        .join(models.Course, models.Module.course_id == models.Course.id)
+        .filter(models.Source.id == source_id, models.Course.user_id == user.id)
+        .first()
+    )
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return source

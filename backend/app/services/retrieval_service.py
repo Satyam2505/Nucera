@@ -20,12 +20,16 @@ from app.services.embedding_service import EMBEDDING_DIM, generate_embedding
 def retrieve_relevant_chunks(
     db: Session,
     question: str,
+    user_id: int,
     topic_id: Optional[int] = None,
     source_ids: Optional[List[int]] = None,
     top_k: int = 5,
 ) -> List[dict]:
     """Embed `question`, rank stored chunks by cosine similarity to it, and
     return the top_k matches with their source metadata.
+
+    Only chunks in `user_id`'s own courses are ever searched; user_id is
+    required so a caller can't search across accounts by leaving it out.
 
     Each result is a plain dict (not an ORM object) so it can be handed
     straight to a Pydantic response model or used as tutor context:
@@ -34,6 +38,10 @@ def retrieve_relevant_chunks(
     query = (
         db.query(models.Chunk)
         .join(models.Source, models.Chunk.source_id == models.Source.id)
+        .join(models.Topic, models.Chunk.topic_id == models.Topic.id)
+        .join(models.Module, models.Topic.module_id == models.Module.id)
+        .join(models.Course, models.Module.course_id == models.Course.id)
+        .filter(models.Course.user_id == user_id)
     )
     if topic_id is not None:
         query = query.filter(models.Chunk.topic_id == topic_id)

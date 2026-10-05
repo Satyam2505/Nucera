@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.deps import get_current_user
+from app.ownership import get_owned_topic
 from app.routers.mastery import apply_score_delta
 from app.services.quiz_service import generate_quiz
 
@@ -10,10 +12,12 @@ router = APIRouter(prefix="/quiz", tags=["quiz"])
 
 
 @router.get("/{topic_id}", response_model=list[schemas.QuizQuestionOut])
-def get_quiz(topic_id: int, db: Session = Depends(get_db)):
-    topic = db.get(models.Topic, topic_id)
-    if not topic:
-        raise HTTPException(status_code=404, detail="Topic not found")
+def get_quiz(
+    topic_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    topic = get_owned_topic(db, topic_id, current_user)
 
     existing = (
         db.query(models.QuizQuestion)
@@ -35,7 +39,12 @@ def get_quiz(topic_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/submit", response_model=schemas.QuizSubmitResult)
-def submit_quiz(payload: schemas.QuizSubmitRequest, db: Session = Depends(get_db)):
+def submit_quiz(
+    payload: schemas.QuizSubmitRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    get_owned_topic(db, payload.topic_id, current_user)
     mastery = db.get(models.Mastery, payload.topic_id)
     if not mastery:
         raise HTTPException(status_code=404, detail="Mastery record not found")

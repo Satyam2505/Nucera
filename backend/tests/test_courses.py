@@ -9,23 +9,6 @@ from app.database import engine
 from helpers import make_course, make_module, make_topic
 
 
-@pytest.fixture()
-def other_client():
-    """A second, independent authenticated user."""
-    from app.main import app
-
-    other = TestClient(app)
-    other.post(
-        "/auth/register", json={"email": "other-user@example.com", "password": "testpassword123"}
-    )
-    login = other.post(
-        "/auth/login",
-        data={"username": "other-user@example.com", "password": "testpassword123"},
-    )
-    other.headers.update({"Authorization": f"Bearer {login.json()['access_token']}"})
-    return other
-
-
 def _tree(client, course_id):
     resp = client.get(f"/courses/{course_id}/tree")
     assert resp.status_code == 200, resp.text

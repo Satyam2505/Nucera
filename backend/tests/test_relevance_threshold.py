@@ -26,7 +26,9 @@ def test_on_topic_question_clears_the_threshold(client, db_session):
         "Collisions are resolved with chaining or open addressing.",
     )
 
-    matches = retrieve_relevant_chunks(db_session, "What is a hash function?", topic_id=topic_id, top_k=3)
+    matches = retrieve_relevant_chunks(
+        db_session, "What is a hash function?", user_id=client.user_id, topic_id=topic_id, top_k=3
+    )
     assert matches
     assert matches[0]["similarity_score"] >= RETRIEVAL_RELEVANCE_THRESHOLD
 
@@ -43,7 +45,11 @@ def test_off_topic_question_falls_below_the_threshold(client, db_session):
 
     # Genuinely unrelated to the uploaded material.
     matches = retrieve_relevant_chunks(
-        db_session, "What ingredients go into a chocolate cake?", topic_id=topic_id, top_k=3
+        db_session,
+        "What ingredients go into a chocolate cake?",
+        user_id=client.user_id,
+        topic_id=topic_id,
+        top_k=3,
     )
     assert matches  # some chunk always comes back, it's just not relevant
     assert matches[0]["similarity_score"] < RETRIEVAL_RELEVANCE_THRESHOLD

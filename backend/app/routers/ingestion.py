@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.deps import get_current_user
+from app.ownership import get_owned_source, get_owned_topic
 from app.services.chunking import chunk_pages
 from app.services.embedding_service import embed_texts
 from app.services.text_extraction import extract_pages
@@ -14,18 +16,14 @@ router = APIRouter(prefix="/sources", tags=["ingestion"])
 
 def _ingest_pages(
     db: Session,
-    topic_id: int,
+    topic: models.Topic,
     source_type: models.SourceType,
     title: str,
     pages: List[Tuple[Optional[int], str]],
     file_path: Optional[str] = None,
 ) -> models.Source:
-    topic = db.get(models.Topic, topic_id)
-    if not topic:
-        raise HTTPException(status_code=404, detail="Topic not found")
-
     source = models.Source(
-        topic_id=topic_id,
+        topic_id=topic.id,
         source_type=source_type,
         title=title,
         raw_text="\n\n".join(text for _, text in pages),
@@ -42,7 +40,7 @@ def _ingest_pages(
             db.add(
                 models.Chunk(
                     source_id=source.id,
-                    topic_id=topic_id,
+                    topic_id=topic.id,
                     chunk_text=piece.text,
                     chunk_index=piece.chunk_index,
                     page_number=piece.page_number,
@@ -55,10 +53,13 @@ def _ingest_pages(
 
 
 @router.post("/text", response_model=schemas.SourceOut)
-def ingest_text(payload: schemas.IngestTextRequest, db: Session = Depends(get_db)):
-    return _ingest_pages(
-        db, payload.topic_id, payload.source_type, payload.title, [(None, payload.text)]
-    )
+def ingest_text(
+    payload: schemas.IngestTextRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    topic = get_owned_topic(db, payload.topic_id, current_user)
+    return _ingest_pages(db, topic, payload.source_type, payload.title, [(None, payload.text)])
 
 
 @router.post("/upload", response_model=schemas.SourceOut)
@@ -67,7 +68,11 @@ async def ingest_file(
     source_type: models.SourceType = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
+    # Ownership first, so nothing of someone else's topic is read or processed.
+    topic = get_owned_topic(db, topic_id, current_user)
+
     raw_bytes = await file.read()
     filename = file.filename or "uploaded file"
 
@@ -77,20 +82,25 @@ async def ingest_file(
             status_code=400, detail="Could not extract any text from the uploaded file"
         )
 
-    return _ingest_pages(
-        db, topic_id, source_type, filename, pages, file_path=filename
-    )
+    return _ingest_pages(db, topic, source_type, filename, pages, file_path=filename)
 
 
 @router.get("/topic/{topic_id}", response_model=list[schemas.SourceOut])
-def list_sources_for_topic(topic_id: int, db: Session = Depends(get_db)):
+def list_sources_for_topic(
+    topic_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    get_owned_topic(db, topic_id, current_user)
     return db.query(models.Source).filter(models.Source.topic_id == topic_id).all()
 
 
 @router.delete("/{source_id}", status_code=204)
-def delete_source(source_id: int, db: Session = Depends(get_db)):
-    source = db.get(models.Source, source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail="Source not found")
+def delete_source(
+    source_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    source = get_owned_source(db, source_id, current_user)
     db.delete(source)
     db.commit()

@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.deps import get_current_user
+from app.ownership import get_owned_topic
 from app.services import graph_service
 from app.services.retrieval_service import retrieve_relevant_chunks
 from app.services.tutor_service import generate_tutor_answer
@@ -11,13 +13,17 @@ router = APIRouter(tags=["tutor"])
 
 
 @router.post("/ask", response_model=schemas.AskResponse)
-def ask(payload: schemas.AskRequest, db: Session = Depends(get_db)):
-    topic = db.get(models.Topic, payload.topic_id)
-    if not topic:
-        raise HTTPException(status_code=404, detail="Topic not found")
+def ask(
+    payload: schemas.AskRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    topic = get_owned_topic(db, payload.topic_id, current_user)
 
     # 1. RAG grounding — the top relevant chunks from this topic's material.
-    matches = retrieve_relevant_chunks(db, payload.query, topic_id=payload.topic_id, top_k=5)
+    matches = retrieve_relevant_chunks(
+        db, payload.query, user_id=current_user.id, topic_id=payload.topic_id, top_k=5
+    )
     retrieved_chunks = [
         {
             "source": match["source"].title,
@@ -31,7 +37,9 @@ def ask(payload: schemas.AskRequest, db: Session = Depends(get_db)):
     # 2. Adaptive guidance — prerequisite gaps, each paired with its actual
     # mastery score (graph_service only knows which topics are unmastered,
     # not by how much).
-    flagged_topics = graph_service.get_unmastered_prerequisites(db, payload.topic_id)
+    flagged_topics = graph_service.get_unmastered_prerequisites(
+        db, payload.topic_id, current_user.id
+    )
     gap_mastery_by_topic = {
         m.topic_id: m
         for m in db.query(models.Mastery)
