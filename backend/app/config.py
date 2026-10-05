@@ -27,13 +27,16 @@ RETRIEVAL_RELEVANCE_THRESHOLD = float(os.getenv("RETRIEVAL_RELEVANCE_THRESHOLD",
 UPLOAD_MAX_BYTES = int(float(os.getenv("MAX_UPLOAD_MB", "20")) * 1024 * 1024)
 
 # Quiz generation. Writing several questions takes a local CPU model much
-# longer than a tutor answer, hence its own (longer) timeout. The excerpt
-# limits keep the prompt within a small model's context.
+# longer than a tutor answer, hence its own (longer) timeout. Measured with
+# llama3.2:3b on a CPU: about 5 tokens/s, and a five-question JSON reply is
+# roughly 1,100-1,400 tokens, i.e. 220-280 s on a warm model and more on a
+# cold one, so 240 s timed out; 600 s leaves room. The excerpt limits keep
+# the prompt within a small model's context.
 QUIZ_QUESTION_COUNT = int(os.getenv("QUIZ_QUESTION_COUNT", "5"))
 QUIZ_MIN_VALID_QUESTIONS = int(os.getenv("QUIZ_MIN_VALID_QUESTIONS", "3"))
 QUIZ_MAX_EXCERPTS = int(os.getenv("QUIZ_MAX_EXCERPTS", "8"))
 QUIZ_CONTEXT_CHAR_BUDGET = int(os.getenv("QUIZ_CONTEXT_CHAR_BUDGET", "9000"))
-QUIZ_LLM_TIMEOUT_SECONDS = float(os.getenv("QUIZ_LLM_TIMEOUT_SECONDS", "240"))
+QUIZ_LLM_TIMEOUT_SECONDS = float(os.getenv("QUIZ_LLM_TIMEOUT_SECONDS", "600"))
 
 # Auth. JWT_SECRET_KEY MUST be overridden via env in any real deployment —
 # the fallback only exists so local dev works out of the box on a single

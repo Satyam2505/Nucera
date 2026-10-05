@@ -174,7 +174,7 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
             Generating questions from your material...
           </p>
           <p className="text-sm text-stone-600 dark:text-stone-300">
-            This can take a minute on a local model. You can stay on this page.
+            This can take a few minutes on a CPU. You can stay on this page.
           </p>
           <Button disabled className={primaryButton}>
             Generating...
