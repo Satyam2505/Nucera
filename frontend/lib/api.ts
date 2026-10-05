@@ -248,7 +248,7 @@ export const api = {
     request<Mastery>(`/mastery/${topicId}/missed`, { method: "POST" }),
   toggleRevision: (topicId: number) =>
     request<Mastery>(`/mastery/${topicId}/toggle-revision`, { method: "POST" }),
-  updateMastery: (topicId: number, payload: Partial<Pick<Mastery, "score" | "status">>) =>
+  updateMastery: (topicId: number, payload: { score: number }) =>
     request<Mastery>(`/mastery/${topicId}`, {
       method: "PUT",
       body: JSON.stringify(payload),

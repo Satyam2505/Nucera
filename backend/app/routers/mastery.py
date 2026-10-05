@@ -5,16 +5,9 @@ from app import models, schemas
 from app.database import get_db
 from app.deps import get_current_user
 from app.ownership import get_owned_topic
+from app.services.mastery_service import apply_score_delta, set_score
 
 router = APIRouter(tags=["mastery"])
-
-
-def apply_score_delta(mastery: models.Mastery, score_delta: int) -> None:
-    mastery.score = max(0, min(100, mastery.score + score_delta))
-    if mastery.score >= 80:
-        mastery.status = models.MasteryStatus.mastered
-    elif mastery.score > 0:
-        mastery.status = models.MasteryStatus.in_progress
 
 
 def _owned_mastery(db: Session, topic_id: int, user: models.User) -> models.Mastery:
@@ -59,10 +52,10 @@ def update_mastery(
 ):
     mastery = _owned_mastery(db, topic_id, current_user)
 
+    # The status follows from the score (see mastery_service); it can't be
+    # set directly here, only via POST .../missed.
     if payload.score is not None:
-        mastery.score = max(0, min(100, payload.score))
-    if payload.status is not None:
-        mastery.status = payload.status
+        set_score(mastery, payload.score)
 
     db.commit()
     db.refresh(mastery)

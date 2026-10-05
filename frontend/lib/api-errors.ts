@@ -29,9 +29,10 @@ export function errorDetail(status: number, body: string): string {
     // Valid JSON, but nothing readable in it: never show the blob.
     return generic;
   } catch {
-    // Not JSON — a plain-text body (a proxy error page, say) is shown as-is.
+    // Not JSON — a short plain-text body is shown as-is, but markup (a proxy's
+    // HTML error page) never is.
     const text = body.trim();
-    return text ? text.slice(0, MAX_BODY_CHARS) : generic;
+    return text && !text.startsWith("<") ? text.slice(0, MAX_BODY_CHARS) : generic;
   }
 }
 

@@ -164,8 +164,10 @@ class MasteryOut(BaseModel):
 
 
 class MasteryUpdate(BaseModel):
+    # Only the score can be set; the status is derived from it. Unknown fields
+    # (such as the old `status`) are rejected rather than silently ignored.
+    model_config = ConfigDict(extra="forbid")
     score: Optional[int] = None
-    status: Optional[MasteryStatus] = None
 
 
 class SessionCreate(BaseModel):

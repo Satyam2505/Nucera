@@ -93,7 +93,7 @@ def test_tree_returns_modules_and_topics_in_order_with_mastery(client):
     ).json()
     client.post("/topics", json={"name": "Second", "module_id": one["id"]})
     client.post("/topics", json={"name": "Third", "module_id": two["id"]})
-    client.put(f"/mastery/{first['id']}", json={"score": 85, "status": "mastered"})
+    client.put(f"/mastery/{first['id']}", json={"score": 85})
     client.post(f"/mastery/{first['id']}/toggle-revision")
 
     tree = _tree(client, course["id"])

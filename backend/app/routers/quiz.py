@@ -5,7 +5,7 @@ from app import models, schemas
 from app.database import get_db
 from app.deps import get_current_user
 from app.ownership import get_owned_topic
-from app.routers.mastery import apply_score_delta
+from app.services.mastery_service import apply_score_delta
 from app.services.quiz_service import generate_quiz
 
 router = APIRouter(prefix="/quiz", tags=["quiz"])

@@ -42,6 +42,11 @@ test("plain-text bodies are shown but capped", () => {
   assert.equal(errorDetail(500, "x".repeat(500)).length, 200);
 });
 
+test("an HTML error page falls back to the generic line, not markup", () => {
+  assert.equal(errorDetail(502, "<html><body>Bad Gateway</body></html>"), "Request failed (502)");
+  assert.equal(errorDetail(503, "  \n<!DOCTYPE html><title>x</title>"), "Request failed (503)");
+});
+
 test("JSON without a usable detail falls back to a generic line, never a blob", () => {
   assert.equal(errorDetail(500, JSON.stringify({ error: "boom" })), "Request failed (500)");
   assert.equal(errorDetail(500, JSON.stringify({ detail: "" })), "Request failed (500)");
