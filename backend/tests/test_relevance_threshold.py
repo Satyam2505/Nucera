@@ -5,6 +5,7 @@ involved). This is what the threshold in app/config.py was tuned against.
 
 from app.config import RETRIEVAL_RELEVANCE_THRESHOLD
 from app.services.retrieval_service import retrieve_relevant_chunks
+from helpers import make_topic
 
 
 def _ingest(client, topic_id, title, text):
@@ -16,8 +17,7 @@ def _ingest(client, topic_id, title, text):
 
 
 def test_on_topic_question_clears_the_threshold(client, db_session):
-    resp = client.post("/topics", json={"name": "Hash Tables", "course": "Test", "description": ""})
-    topic_id = resp.json()["id"]
+    topic_id = make_topic(client, "Hash Tables", course="Test")["id"]
     _ingest(
         client,
         topic_id,
@@ -32,8 +32,7 @@ def test_on_topic_question_clears_the_threshold(client, db_session):
 
 
 def test_off_topic_question_falls_below_the_threshold(client, db_session):
-    resp = client.post("/topics", json={"name": "Hash Tables 2", "course": "Test", "description": ""})
-    topic_id = resp.json()["id"]
+    topic_id = make_topic(client, "Hash Tables 2", course="Test")["id"]
     _ingest(
         client,
         topic_id,

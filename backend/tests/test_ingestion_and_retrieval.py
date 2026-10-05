@@ -1,11 +1,10 @@
 from app import models
 from app.services import llm_service
+from helpers import make_topic
 
 
 def _create_topic(client, name, course="Test Course"):
-    resp = client.post("/topics", json={"name": name, "course": course, "description": ""})
-    assert resp.status_code == 200, resp.text
-    return resp.json()["id"]
+    return make_topic(client, name, course=course)["id"]
 
 
 def test_ingest_text_creates_chunks_with_real_embeddings(client, db_session):
@@ -171,10 +170,7 @@ def test_ask_endpoint_uses_real_retrieval_and_still_flags_prerequisites(client, 
     )
 
     prereq_topic = _create_topic(client, "Sets", course="DS&A")
-    main_topic_resp = client.post(
-        "/topics", json={"name": "Hash Tables", "course": "DS&A", "description": ""}
-    )
-    main_topic = main_topic_resp.json()["id"]
+    main_topic = _create_topic(client, "Hash Tables", course="DS&A")
 
     prereq_resp = client.post(
         "/topics/prerequisites",

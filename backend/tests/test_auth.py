@@ -8,6 +8,7 @@ need a *second* independent user to prove data isolation.
 from fastapi.testclient import TestClient
 
 from app.main import app
+from helpers import make_topic
 
 
 def _raw_client():
@@ -74,13 +75,10 @@ def test_users_only_see_their_own_topics():
     token_a = _token_for(client, "dave@example.com", "password123")
     token_b = _token_for(client, "erin@example.com", "password123")
 
-    create_resp = client.post(
-        "/topics",
-        json={"name": "Dave's Topic", "course": "Course A", "description": ""},
-        headers={"Authorization": f"Bearer {token_a}"},
-    )
-    assert create_resp.status_code == 200, create_resp.text
-    dave_topic_id = create_resp.json()["id"]
+    # make_topic drives the client as one user, so give it Dave's token.
+    client.headers.update({"Authorization": f"Bearer {token_a}"})
+    dave_topic_id = make_topic(client, "Dave's Topic", course="Course A")["id"]
+    client.headers.pop("Authorization")
 
     dave_list = client.get("/topics", headers={"Authorization": f"Bearer {token_a}"})
     assert [t["id"] for t in dave_list.json()] == [dave_topic_id]

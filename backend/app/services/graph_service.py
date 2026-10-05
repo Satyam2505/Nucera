@@ -1,9 +1,28 @@
 from typing import Optional
 
 import networkx as nx
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session, contains_eager
 
-from app.models import Mastery, MasteryStatus, Prerequisite, Topic
+from app.models import Course, Mastery, MasteryStatus, Module, Prerequisite, Topic
+
+
+def topic_query(db: Session, user_id: Optional[int], course_id: Optional[int] = None) -> Query:
+    """Topics in reading order (course, module, position), optionally limited
+    to one user's courses and/or a single course. Ownership resolves through
+    course.user_id, matching app/ownership.py.
+    """
+    query = (
+        db.query(Topic)
+        .join(Module, Topic.module_id == Module.id)
+        .join(Course, Module.course_id == Course.id)
+        .options(contains_eager(Topic.module))
+        .order_by(Course.id, Module.position, Topic.position)
+    )
+    if user_id is not None:
+        query = query.filter(Course.user_id == user_id)
+    if course_id is not None:
+        query = query.filter(Course.id == course_id)
+    return query
 
 
 def build_graph(db: Session, user_id: Optional[int] = None) -> nx.DiGraph:
@@ -16,12 +35,9 @@ def build_graph(db: Session, user_id: Optional[int] = None) -> nx.DiGraph:
     """
     graph = nx.DiGraph()
 
-    topic_query = db.query(Topic)
-    if user_id is not None:
-        topic_query = topic_query.filter(Topic.user_id == user_id)
     topic_ids = set()
-    for topic in topic_query.all():
-        graph.add_node(topic.id, name=topic.name, course=topic.course)
+    for topic in topic_query(db, user_id).all():
+        graph.add_node(topic.id, name=topic.name, module_id=topic.module_id)
         topic_ids.add(topic.id)
 
     for prereq in db.query(Prerequisite).all():
@@ -65,28 +81,30 @@ def get_topic_order(db: Session, user_id: Optional[int] = None) -> list[Topic]:
     except nx.NetworkXUnfeasible:
         ordered_ids = list(graph.nodes)
 
-    topic_query = db.query(Topic)
-    if user_id is not None:
-        topic_query = topic_query.filter(Topic.user_id == user_id)
-    topics_by_id = {t.id: t for t in topic_query.all()}
+    topics_by_id = {t.id: t for t in topic_query(db, user_id).all()}
     return [topics_by_id[tid] for tid in ordered_ids if tid in topics_by_id]
 
 
-def get_graph_json(db: Session, user_id: Optional[int] = None) -> dict:
-    topic_query = db.query(Topic)
-    if user_id is not None:
-        topic_query = topic_query.filter(Topic.user_id == user_id)
-    topics = topic_query.all()
+def get_graph_json(
+    db: Session, user_id: Optional[int] = None, course_id: Optional[int] = None
+) -> dict:
+    topics = topic_query(db, user_id, course_id).all()
     topic_ids = {t.id for t in topics}
 
-    mastery_by_topic = {m.topic_id: m for m in db.query(Mastery).all()}
-    prereqs = db.query(Prerequisite).all()
+    mastery_by_topic = {
+        m.topic_id: m
+        for m in db.query(Mastery).filter(Mastery.topic_id.in_(topic_ids)).all()
+    }
+    prereqs = db.query(Prerequisite).filter(Prerequisite.topic_id.in_(topic_ids)).all()
 
     nodes = [
         {
             "id": topic.id,
             "name": topic.name,
-            "course": topic.course,
+            "course_id": topic.module.course_id,
+            "module_id": topic.module_id,
+            "module_name": topic.module.name,
+            "module_position": topic.module.position,
             "status": (
                 mastery_by_topic[topic.id].status.value
                 if topic.id in mastery_by_topic
@@ -100,7 +118,7 @@ def get_graph_json(db: Session, user_id: Optional[int] = None) -> dict:
     edges = [
         {"source": p.prerequisite_topic_id, "target": p.topic_id}
         for p in prereqs
-        if user_id is None or (p.prerequisite_topic_id in topic_ids and p.topic_id in topic_ids)
+        if p.prerequisite_topic_id in topic_ids
     ]
 
     return {"nodes": nodes, "edges": edges}

@@ -115,6 +115,20 @@ class Topic(Base):
     owner = relationship("User", back_populates="topics")
     module = relationship("Module", back_populates="topics")
 
+    # Denormalised onto TopicOut so the UI can show "Course · Module" and
+    # link by course id without extra fetches.
+    @property
+    def module_name(self) -> str:
+        return self.module.name
+
+    @property
+    def course_id(self) -> int:
+        return self.module.course_id
+
+    @property
+    def course_name(self) -> str:
+        return self.module.course.name
+
     mastery = relationship(
         "Mastery", back_populates="topic", uselist=False, cascade="all, delete-orphan"
     )

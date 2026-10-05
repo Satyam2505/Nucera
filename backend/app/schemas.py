@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
 
 from app.models import MasteryStatus, SessionType, SourceType
 
@@ -28,20 +28,98 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
-class TopicBase(BaseModel):
-    name: str
-    course: str
+# Names are trimmed and must be non-empty, so "   " can't become a course,
+# module or topic.
+Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+
+
+class CourseCreate(BaseModel):
+    name: Name
     description: Optional[str] = None
 
 
-class TopicCreate(TopicBase):
-    pass
+class CourseUpdate(BaseModel):
+    name: Optional[Name] = None
+    description: Optional[str] = None
 
 
-class TopicOut(TopicBase):
+class CourseOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    name: str
+    description: Optional[str] = None
     created_at: datetime
+    module_count: int = 0
+    topic_count: int = 0
+    avg_score: int = 0
+
+
+class ModuleCreate(BaseModel):
+    name: Name
+    description: Optional[str] = None
+
+
+class ModuleUpdate(BaseModel):
+    name: Optional[Name] = None
+    description: Optional[str] = None
+    # Move the module to this 0-based index among its siblings.
+    position: Optional[int] = Field(default=None, ge=0)
+
+
+class OrderUpdate(BaseModel):
+    ids: List[int]
+
+
+class TreeTopic(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    position: int
+    status: MasteryStatus
+    score: int
+    flagged_for_revision: bool
+
+
+class TreeModule(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    position: int
+    topics: List[TreeTopic]
+
+
+class CourseTree(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    created_at: datetime
+    modules: List[TreeModule]
+
+
+class TopicCreate(BaseModel):
+    name: Name
+    module_id: int
+    description: Optional[str] = None
+
+
+class TopicUpdate(BaseModel):
+    name: Optional[Name] = None
+    description: Optional[str] = None
+    # Moving to a module of the same course; appended at the end of it.
+    module_id: Optional[int] = None
+
+
+class TopicOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    description: Optional[str] = None
+    created_at: datetime
+    module_id: int
+    position: int
+    module_name: str
+    course_id: int
+    course_name: str
 
 
 class PrerequisiteCreate(BaseModel):

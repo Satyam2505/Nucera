@@ -1,10 +1,13 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
 from app.deps import get_current_user
-from app.services import graph_service
+from app.ownership import get_owned_course, get_owned_module, get_owned_topic
+from app.services import graph_service, ordering
 
 router = APIRouter(prefix="/topics", tags=["topics"])
 
@@ -13,7 +16,7 @@ router = APIRouter(prefix="/topics", tags=["topics"])
 def list_topics(
     db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
-    return db.query(models.Topic).filter(models.Topic.user_id == current_user.id).all()
+    return graph_service.topic_query(db, user_id=current_user.id).all()
 
 
 @router.post("", response_model=schemas.TopicOut)
@@ -22,13 +25,21 @@ def create_topic(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    topic = models.Topic(**payload.model_dump(), user_id=current_user.id)
-    db.add(topic)
-    db.commit()
-    db.refresh(topic)
+    module = get_owned_module(db, payload.module_id, current_user)
 
+    topic = models.Topic(
+        module_id=module.id,
+        # topics.user_id is kept in sync with the course owner.
+        user_id=module.course.user_id,
+        name=payload.name,
+        description=payload.description,
+        position=ordering.next_position(module.topics),
+    )
+    db.add(topic)
+    db.flush()
     db.add(models.Mastery(topic_id=topic.id))
     db.commit()
+    db.refresh(topic)
 
     return topic
 
@@ -42,10 +53,13 @@ def add_prerequisite(
     if payload.topic_id == payload.prerequisite_topic_id:
         raise HTTPException(status_code=400, detail="A topic cannot be its own prerequisite")
 
-    for topic_id in (payload.topic_id, payload.prerequisite_topic_id):
-        topic = db.get(models.Topic, topic_id)
-        if not topic or topic.user_id != current_user.id:
-            raise HTTPException(status_code=404, detail="Topic not found")
+    topic = get_owned_topic(db, payload.topic_id, current_user)
+    prerequisite_topic = get_owned_topic(db, payload.prerequisite_topic_id, current_user)
+
+    if topic.module.course_id != prerequisite_topic.module.course_id:
+        raise HTTPException(
+            status_code=400, detail="Prerequisites must be within the same course"
+        )
 
     existing = db.get(
         models.Prerequisite, (payload.topic_id, payload.prerequisite_topic_id)
@@ -60,9 +74,13 @@ def add_prerequisite(
 
 @router.get("/graph/json")
 def get_graph(
-    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+    course_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    return graph_service.get_graph_json(db, user_id=current_user.id)
+    if course_id is not None:
+        get_owned_course(db, course_id, current_user)
+    return graph_service.get_graph_json(db, user_id=current_user.id, course_id=course_id)
 
 
 @router.get("/graph/order", response_model=list[schemas.TopicOut])
@@ -78,7 +96,54 @@ def get_topic(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    topic = db.get(models.Topic, topic_id)
-    if not topic or topic.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Topic not found")
+    return get_owned_topic(db, topic_id, current_user)
+
+
+@router.patch("/{topic_id}", response_model=schemas.TopicOut)
+def update_topic(
+    topic_id: int,
+    payload: schemas.TopicUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    topic = get_owned_topic(db, topic_id, current_user)
+    fields = payload.model_dump(exclude_unset=True)
+
+    if fields.get("name") is not None:
+        topic.name = fields["name"]
+    if "description" in fields:
+        topic.description = fields["description"]
+
+    new_module_id = fields.get("module_id")
+    if new_module_id is not None and new_module_id != topic.module_id:
+        new_module = get_owned_module(db, new_module_id, current_user)
+        old_module = topic.module
+        if new_module.course_id != old_module.course_id:
+            raise HTTPException(
+                status_code=400, detail="A topic can only move to a module of the same course"
+            )
+
+        old_siblings = [t for t in old_module.topics if t.id != topic.id]
+        topic.position = ordering.next_position(new_module.topics)
+        topic.module = new_module
+        topic.user_id = new_module.course.user_id
+        ordering.repack(old_siblings)
+
+    db.commit()
+    db.refresh(topic)
     return topic
+
+
+@router.delete("/{topic_id}", status_code=204)
+def delete_topic(
+    topic_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    topic = get_owned_topic(db, topic_id, current_user)
+    siblings = [t for t in topic.module.topics if t.id != topic.id]
+    # session.delete so mastery, sources/chunks, sessions, quiz questions and
+    # prerequisite rows (as prerequisite or dependent) cascade through the ORM.
+    db.delete(topic)
+    ordering.repack(siblings)
+    db.commit()

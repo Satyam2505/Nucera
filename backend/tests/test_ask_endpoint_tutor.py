@@ -1,10 +1,9 @@
 from app.services import llm_service
+from helpers import make_topic
 
 
 def _create_topic(client, name, course="Test Course"):
-    resp = client.post("/topics", json={"name": name, "course": course, "description": ""})
-    assert resp.status_code == 200, resp.text
-    return resp.json()["id"]
+    return make_topic(client, name, course=course)["id"]
 
 
 def test_ask_returns_grounded_answer_with_sources_when_llm_succeeds(client, monkeypatch):
@@ -45,10 +44,7 @@ def test_ask_still_flags_prerequisite_gaps_alongside_the_real_answer(client, mon
     )
 
     prereq_topic = _create_topic(client, "Sets", course="DS&A")
-    main_topic_resp = client.post(
-        "/topics", json={"name": "Hash Tables 2", "course": "DS&A", "description": ""}
-    )
-    main_topic = main_topic_resp.json()["id"]
+    main_topic = _create_topic(client, "Hash Tables 2", course="DS&A")
     client.post(
         "/topics/prerequisites",
         json={"topic_id": main_topic, "prerequisite_topic_id": prereq_topic},
