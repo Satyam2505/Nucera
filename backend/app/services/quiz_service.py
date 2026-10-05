@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Set
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app import models
 from app.config import (
@@ -350,8 +350,19 @@ def create_quiz_set(
     count = count or QUIZ_QUESTION_COUNT
     min_valid = min(QUIZ_MIN_VALID_QUESTIONS, count)
 
+    # Only the columns excerpts need: chunks also carry a 384-float embedding
+    # each, which quiz generation never reads.
     rows = (
         db.query(models.Chunk, models.Source.title)
+        .options(
+            load_only(
+                models.Chunk.id,
+                models.Chunk.source_id,
+                models.Chunk.chunk_text,
+                models.Chunk.chunk_index,
+                models.Chunk.page_number,
+            )
+        )
         .join(models.Source, models.Chunk.source_id == models.Source.id)
         .filter(models.Chunk.topic_id == topic.id)
         .all()

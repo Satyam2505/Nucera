@@ -300,11 +300,13 @@ class QuizAttempt(Base):
     """
 
     __tablename__ = "quiz_attempts"
+    # One graded attempt per set, guaranteed by the database: two concurrent
+    # submits can both pass the application's "already submitted" check, but
+    # only one insert can succeed.
+    __table_args__ = (UniqueConstraint("quiz_set_id", name="uq_quiz_attempts_quiz_set_id"),)
 
     id = Column(Integer, primary_key=True)
-    quiz_set_id = Column(
-        Integer, ForeignKey("quiz_sets.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    quiz_set_id = Column(Integer, ForeignKey("quiz_sets.id", ondelete="CASCADE"), nullable=False)
     correct = Column(Integer, nullable=False)
     total = Column(Integer, nullable=False)
     score_percent = Column(Float, nullable=False)

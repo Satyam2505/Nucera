@@ -63,7 +63,6 @@ def upgrade():
             sa.Integer,
             sa.ForeignKey("quiz_sets.id", ondelete="CASCADE"),
             nullable=False,
-            index=True,
         ),
         sa.Column("correct", sa.Integer, nullable=False),
         sa.Column("total", sa.Integer, nullable=False),
@@ -71,6 +70,9 @@ def upgrade():
         sa.Column("score_delta", sa.Integer, nullable=False),
         sa.Column("answers", sa.JSON, nullable=False),
         sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
+        # One graded attempt per set, enforced here (not only in the API) so
+        # concurrent submits can't both be recorded.
+        sa.UniqueConstraint("quiz_set_id", name="uq_quiz_attempts_quiz_set_id"),
     )
 
     with op.batch_alter_table("quiz_questions") as batch_op:

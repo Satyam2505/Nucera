@@ -7,9 +7,12 @@ so none of this needs Ollama or the embedding model.
 import json
 
 import pytest
-from sqlalchemy import func
+from sqlalchemy import event, func
+from sqlalchemy.exc import IntegrityError
 
 from app import models
+from app.database import engine
+from app.routers import quiz as quiz_router
 from app.services import llm_service, quiz_service
 from helpers import make_topic
 
@@ -379,6 +382,77 @@ def test_the_graded_set_shows_its_results_on_reload_but_the_ungraded_one_hides_t
     assert after["attempt"]["correct"] == 2
     assert len(after["attempt"]["results"]) == 5
     assert after["attempt"]["results"][0]["explanation"]
+
+
+def test_one_attempt_per_set_is_a_database_guarantee(db_session, quiz):
+    def attempt():
+        return models.QuizAttempt(
+            quiz_set_id=quiz["set"], correct=1, total=5, score_percent=20.0, score_delta=-6, answers={}
+        )
+
+    db_session.add(attempt())
+    db_session.commit()
+    db_session.add(attempt())
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+    assert count(db_session, models.QuizAttempt) == 1
+
+
+def test_a_submit_that_loses_the_race_is_a_409_and_changes_nothing(
+    client, db_session, quiz, monkeypatch
+):
+    # Another request already recorded an attempt for this set...
+    db_session.add(
+        models.QuizAttempt(
+            quiz_set_id=quiz["set"], correct=5, total=5, score_percent=100.0, score_delta=10, answers={}
+        )
+    )
+    db_session.commit()
+    # ...but this request's "already submitted" check ran before that commit and
+    # passed. The unique constraint must still stop it.
+    monkeypatch.setattr(quiz_router, "_has_attempt", lambda quiz_set: False)
+
+    resp = submit(client, quiz, answers(quiz["keys"], correct_ids=quiz["ids"]))
+    assert resp.status_code == 409
+    assert "already submitted" in resp.json()["detail"]
+
+    assert count(db_session, models.QuizAttempt) == 1
+    assert count(db_session, models.StudySession) == 0  # no second session was recorded
+    assert client.get(f"/mastery/{quiz['topic']}").json()["score"] == 0  # delta not applied
+
+
+def test_resubmitting_an_attempted_set_is_a_409_and_changes_nothing(client, db_session, quiz):
+    db_session.add(
+        models.QuizAttempt(
+            quiz_set_id=quiz["set"], correct=5, total=5, score_percent=100.0, score_delta=10, answers={}
+        )
+    )
+    db_session.commit()
+
+    resp = submit(client, quiz, answers(quiz["keys"], correct_ids=quiz["ids"]))
+    assert resp.status_code == 409
+    assert count(db_session, models.QuizAttempt) == 1
+    assert count(db_session, models.StudySession) == 0
+    assert client.get(f"/mastery/{quiz['topic']}").json()["score"] == 0
+
+
+def test_generation_does_not_load_chunk_embeddings(client, topic, fake_llm):
+    fake_llm(good_reply())
+    statements = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        assert generate(client, topic).status_code == 200
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+
+    chunk_selects = [s for s in statements if "FROM chunks" in s and s.lstrip().startswith("SELECT")]
+    assert chunk_selects
+    assert not any("chunks.embedding" in s for s in chunk_selects)
 
 
 # --- regeneration keeps history --------------------------------------------------------------------

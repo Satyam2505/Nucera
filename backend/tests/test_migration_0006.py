@@ -78,6 +78,15 @@ def test_upgrade_reshapes_quiz_questions(populated_db):
     con.close()
     assert _rows(populated_db, "SELECT COUNT(*) FROM quiz_questions") == [(1,)]
 
+    # One graded attempt per set is enforced by the schema itself.
+    con = sqlite3.connect(populated_db)
+    with pytest.raises(sqlite3.IntegrityError):
+        con.execute(
+            "INSERT INTO quiz_attempts (quiz_set_id, correct, total, score_percent, score_delta, answers) "
+            "VALUES (1, 0, 1, 0.0, -10, '{}')"
+        )
+    con.close()
+
 
 def test_downgrade_restores_topic_id_from_the_set(populated_db):
     _alembic(populated_db, "upgrade", "head")

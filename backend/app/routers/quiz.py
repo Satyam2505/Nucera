@@ -1,6 +1,7 @@
 from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -12,6 +13,12 @@ from app.services import quiz_service
 from app.services.mastery_service import apply_score_delta
 
 router = APIRouter(prefix="/quiz", tags=["quiz"])
+
+ALREADY_SUBMITTED = "This quiz was already submitted. Start a new quiz to try again."
+
+
+def _has_attempt(quiz_set: models.QuizSet) -> bool:
+    return bool(quiz_set.attempts)
 
 
 def _question_out(question: models.QuizQuestion) -> schemas.QuizQuestionOut:
@@ -128,10 +135,8 @@ def submit_quiz(
             raise HTTPException(status_code=400, detail="Those answers don't match this quiz.")
         chosen[answer.question_id] = answer.selected_option
 
-    if quiz_set.attempts:
-        raise HTTPException(
-            status_code=409, detail="This quiz was already submitted. Start a new quiz to try again."
-        )
+    if _has_attempt(quiz_set):
+        raise HTTPException(status_code=409, detail=ALREADY_SUBMITTED)
 
     mastery = db.get(models.Mastery, quiz_set.topic_id)
     if not mastery:
@@ -159,6 +164,13 @@ def submit_quiz(
     )
     apply_score_delta(mastery, score_delta)
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # A concurrent submit won the race for this set (the unique constraint
+        # on quiz_attempts.quiz_set_id). Undo everything, including the
+        # mastery change, and report the same conflict as the check above.
+        db.rollback()
+        raise HTTPException(status_code=409, detail=ALREADY_SUBMITTED)
     db.refresh(attempt)
     return _attempt_out(db, quiz_set, attempt)
