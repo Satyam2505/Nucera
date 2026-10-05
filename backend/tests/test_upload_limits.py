@@ -4,6 +4,8 @@ The embedder is replaced with a fast fake, so none of this loads the real
 sentence-transformers model.
 """
 
+import inspect
+
 import fitz
 import pytest
 from sqlalchemy import func
@@ -230,3 +232,57 @@ def test_uploading_to_someone_elses_topic_is_404_before_anything_is_read(other_c
     resp = upload(other_client, topic, "notes.txt", b"Sneaky notes.")
     assert resp.status_code == 404
     assert counts(db_session) == (0, 0)
+
+
+# --- pasted text and titles are bounded too ----------------------------------------------------------
+
+
+def paste(client, topic_id, text, title="Pasted notes"):
+    return client.post(
+        "/sources/text",
+        json={"topic_id": topic_id, "source_type": "self_supplied", "title": title, "text": text},
+    )
+
+
+def test_pasted_text_is_held_to_the_same_limit_as_an_upload(client, db_session, topic, monkeypatch):
+    monkeypatch.setattr(ingestion, "UPLOAD_MAX_BYTES", 1000)
+    assert paste(client, topic, "a " * 500).status_code == 200  # exactly 1000 characters
+
+    sources_before = counts(db_session)
+    resp = paste(client, topic, "a " * 500 + "b")
+    assert resp.status_code == 413
+    assert "Text is too large" in resp.json()["detail"]
+    assert counts(db_session) == sources_before
+
+
+def test_the_same_413_status_applies_to_a_file_and_to_pasted_text(client, topic, monkeypatch):
+    monkeypatch.setattr(ingestion, "UPLOAD_MAX_BYTES", 100)
+    assert upload(client, topic, "big.txt", b"x" * 101).status_code == 413
+    assert paste(client, topic, "x" * 101).status_code == 413
+
+
+def test_titles_are_trimmed_and_bounded(client, topic):
+    ok = paste(client, topic, "Some notes.", title="  Lecture 3  ")
+    assert ok.status_code == 200 and ok.json()["title"] == "Lecture 3"
+    assert paste(client, topic, "Some notes.", title="t" * 255).status_code == 200
+
+    too_long = paste(client, topic, "Some notes.", title="t" * 256)
+    assert too_long.status_code == 422
+    assert "title" in too_long.text
+    assert paste(client, topic, "Some notes.", title="   ").status_code == 422
+
+
+def test_a_very_long_filename_is_cut_to_the_title_column_length(client, topic):
+    resp = upload(client, topic, "n" * 400 + ".txt", b"Some notes.")
+    # The ".txt" is cut off with the rest, so the type check refuses it
+    # rather than storing an over-long title.
+    assert resp.status_code in (200, 415)
+    if resp.status_code == 200:
+        assert len(resp.json()["title"]) <= 255
+
+
+def test_the_upload_route_is_a_sync_handler_so_cpu_work_runs_off_the_event_loop():
+    # A plain `def` route runs in FastAPI's threadpool. An `async def` one
+    # would run PDF extraction and embedding on the event loop and freeze
+    # every other request while a file is processed.
+    assert not inspect.iscoroutinefunction(ingestion.ingest_file)

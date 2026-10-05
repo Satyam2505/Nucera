@@ -55,6 +55,27 @@ def _overlap_tail(text: str, overlap_chars: int) -> str:
     return tail[boundary.end() :].strip() if boundary else ""
 
 
+def _split_long_sentence(sentence: str, max_chars: int) -> List[str]:
+    """Cut a too-long sentence into pieces of at most `max_chars`, each ending
+    at the last whitespace before the limit. Only a run with no whitespace at
+    all (a long URL, say) is cut mid-token, because there is nowhere better.
+    """
+    pieces: List[str] = []
+    remaining = sentence.strip()
+    while len(remaining) > max_chars:
+        window = remaining[: max_chars + 1]  # a break may fall right at the limit
+        cut = max(window.rfind(" "), window.rfind("\n"), window.rfind("\t"))
+        if cut <= 0:
+            cut = max_chars
+        piece = remaining[:cut].strip()
+        if piece:
+            pieces.append(piece)
+        remaining = remaining[cut:].strip()
+    if remaining:
+        pieces.append(remaining)
+    return pieces
+
+
 def chunk_text(
     text: str,
     max_chars: int = MAX_CHARS,
@@ -74,14 +95,13 @@ def chunk_text(
     current = ""
 
     for sentence in sentences:
-        # A single sentence longer than max_chars has no smaller boundary
-        # to respect, so it gets hard-split.
+        # A single sentence longer than max_chars has no sentence boundary to
+        # respect, so it is split at word boundaries instead.
         if len(sentence) > max_chars:
             if current:
                 chunks.append(current.strip())
                 current = ""
-            for start in range(0, len(sentence), max_chars):
-                chunks.append(sentence[start : start + max_chars].strip())
+            chunks.extend(_split_long_sentence(sentence, max_chars))
             continue
 
         candidate = f"{current} {sentence}".strip() if current else sentence

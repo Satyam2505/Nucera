@@ -1,4 +1,4 @@
-from app.services.chunking import _overlap_tail, chunk_pages, chunk_text
+from app.services.chunking import _overlap_tail, _split_long_sentence, chunk_pages, chunk_text
 
 
 def test_chunk_text_respects_max_chars():
@@ -66,3 +66,52 @@ def test_overlap_tail_cases():
     assert _overlap_tail("aaa bbb ccc", 0) == ""
     # A tail that starts on whitespace is trimmed, not cut.
     assert _overlap_tail("aaa bbb ccc", 4) == "ccc"
+
+
+def test_a_sentence_longer_than_the_limit_is_split_at_word_boundaries():
+    words = [f"word{i}" for i in range(300)]
+    sentence = " ".join(words)  # one huge "sentence": no punctuation to split on
+    assert len(sentence) > 1000
+
+    chunks = chunk_text(sentence, max_chars=200, overlap_chars=40)
+    assert len(chunks) > 5
+    rejoined = []
+    for chunk in chunks:
+        assert len(chunk) <= 200
+        for token in chunk.split():
+            assert token in set(words), f"split mid-word: {token!r}"
+        rejoined.extend(chunk.split())
+    assert rejoined == words  # nothing lost, nothing repeated
+
+
+def test_split_long_sentence_uses_the_last_whitespace_before_the_limit():
+    assert _split_long_sentence("aaaa bbbb cccc dddd", 9) == ["aaaa bbbb", "cccc dddd"]
+    # A break exactly at the limit is used.
+    assert _split_long_sentence("aaaa bbbb cccc", 9) == ["aaaa bbbb", "cccc"]
+    # Newlines and tabs count as whitespace.
+    assert _split_long_sentence("aaaa" + chr(10) + "bbbb" + chr(9) + "cccc dddd", 9) == [
+        "aaaa" + chr(10) + "bbbb",
+        "cccc dddd",
+    ]
+    # Short enough already: one piece.
+    assert _split_long_sentence("short one", 50) == ["short one"]
+
+
+def test_split_long_sentence_falls_back_to_a_hard_cut_only_without_any_whitespace():
+    url = "https://example.com/" + "a" * 80
+    pieces = _split_long_sentence(url, 30)
+    assert all(len(p) <= 30 for p in pieces)
+    assert "".join(pieces) == url  # hard cuts lose nothing
+
+    mixed = "intro " + "x" * 50 + " outro"
+    pieces = _split_long_sentence(mixed, 20)
+    assert all(len(p) <= 20 for p in pieces)
+    assert pieces[0] == "intro"  # split at the space before the long run
+    assert "".join(pieces).replace(" ", "") == mixed.replace(" ", "")
+    assert pieces[-1] == "xxxxxxxxxx outro"  # the remainder fits, so the break is kept
+
+
+def test_split_long_sentence_always_makes_progress():
+    pieces = _split_long_sentence(" " * 5 + "x" * 25, 10)
+    assert pieces and all(0 < len(p) <= 10 for p in pieces)
+    assert "".join(pieces) == "x" * 25

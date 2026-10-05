@@ -20,6 +20,14 @@ router = APIRouter(prefix="/sources", tags=["ingestion"])
 EMBEDDING_FAILED_MESSAGE = (
     "Couldn't process this material right now (the embedding step failed). Nothing was saved."
 )
+# Matches Source.title / Source.file_path.
+MAX_TITLE_CHARS = 255
+
+
+def _too_large(what: str) -> UploadRejected:
+    return UploadRejected(
+        413, f"{what} is too large (the limit is {UPLOAD_MAX_BYTES / (1024 * 1024):g} MB)."
+    )
 
 
 def _ingest_pages(
@@ -78,11 +86,22 @@ def ingest_text(
     current_user: models.User = Depends(get_current_user),
 ):
     topic = get_owned_topic(db, payload.topic_id, current_user)
+    # The same cap as an uploaded file, so pasting can't be used to get around it
+    # (characters, not bytes: close enough for a size guard).
+    if len(payload.text) > UPLOAD_MAX_BYTES:
+        exc = _too_large("Text")
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
     return _ingest_pages(db, topic, payload.source_type, payload.title, [(None, payload.text)])
 
 
+# A plain `def`, not `async def`: extracting a PDF and embedding the chunks are
+# CPU-bound and take seconds, and FastAPI runs a sync route in its worker
+# threadpool, so they can't freeze the event loop (and every other request)
+# while an upload is processed. The body has already been spooled by
+# Starlette, so the read below is an ordinary blocking read of a local file,
+# and the DB session stays on this one thread.
 @router.post("/upload", response_model=schemas.SourceOut)
-async def ingest_file(
+def ingest_file(
     topic_id: int = Form(...),
     source_type: models.SourceType = Form(...),
     file: UploadFile = File(...),
@@ -92,16 +111,15 @@ async def ingest_file(
     # Ownership first, so nothing of someone else's topic is read or processed.
     topic = get_owned_topic(db, topic_id, current_user)
 
-    filename = file.filename or "uploaded file"
+    filename = (file.filename or "uploaded file")[:MAX_TITLE_CHARS]
     try:
         check_extension(filename)  # refuse the type before reading the body
-        # Read one byte past the limit: enough to know it is too big without
-        # ever holding an unbounded file in memory.
-        raw_bytes = await file.read(UPLOAD_MAX_BYTES + 1)
+        # Starlette has already spooled the upload to a temporary file, so the
+        # limit here is about memory: never read more than limit + 1 bytes,
+        # which is enough to tell that the file is too big.
+        raw_bytes = file.file.read(UPLOAD_MAX_BYTES + 1)
         if len(raw_bytes) > UPLOAD_MAX_BYTES:
-            raise UploadRejected(
-                413, f"File is too large (the limit is {UPLOAD_MAX_BYTES / (1024 * 1024):g} MB)."
-            )
+            raise _too_large("File")
         pages = extract_pages(filename, raw_bytes)
     except UploadRejected as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
