@@ -142,23 +142,55 @@ export interface GraphData {
   edges: GraphEdge[];
 }
 
+export interface SourceCitation {
+  source: string;
+  page: number | null;
+}
+
+// A question as shown before grading: no answer key and no explanation.
 export interface QuizQuestion {
   id: number;
-  topic_id: number;
+  position: number;
   question_text: string;
   options: Record<string, string>;
 }
 
-export interface QuizSubmitResult {
-  total: number;
-  correct: number;
-  score_percent: number;
-  mastery: Mastery;
+export interface QuizResultItem {
+  question_id: number;
+  question_text: string;
+  options: Record<string, string>;
+  chosen: string | null;
+  correct_option: string;
+  is_correct: boolean;
+  explanation: string | null;
+  sources: SourceCitation[];
 }
 
-export interface SourceCitation {
-  source: string;
-  page: number | null;
+export interface QuizAttempt {
+  id: number;
+  quiz_set_id: number;
+  correct: number;
+  total: number;
+  score_percent: number;
+  score_delta: number;
+  created_at: string;
+  results: QuizResultItem[];
+  // The topic's mastery as it stands now.
+  mastery: Mastery | null;
+}
+
+export interface QuizSet {
+  id: number;
+  topic_id: number;
+  created_at: string;
+  questions: QuizQuestion[];
+  // Present once the set has been graded; answers only ever arrive with it.
+  attempt: QuizAttempt | null;
+}
+
+export interface QuizState {
+  quiz_set: QuizSet | null;
+  has_material: boolean;
 }
 
 export interface Source {
@@ -278,9 +310,12 @@ export const api = {
   listSources: (topicId: number) => request<Source[]>(`/sources/topic/${topicId}`),
   deleteSource: (sourceId: number) =>
     request<void>(`/sources/${sourceId}`, { method: "DELETE" }),
-  getQuiz: (topicId: number) => request<QuizQuestion[]>(`/quiz/${topicId}`),
+  // Reading never generates; generating is its own (slow) call.
+  getQuiz: (topicId: number) => request<QuizState>(`/quiz/${topicId}`),
+  generateQuiz: (topicId: number) =>
+    request<QuizSet>(`/quiz/${topicId}/generate`, { method: "POST" }),
   submitQuiz: (payload: {
-    topic_id: number;
+    quiz_set_id: number;
     answers: { question_id: number; selected_option: string }[];
-  }) => request<QuizSubmitResult>(`/quiz/submit`, { method: "POST", body: JSON.stringify(payload) }),
+  }) => request<QuizAttempt>(`/quiz/submit`, { method: "POST", body: JSON.stringify(payload) }),
 };

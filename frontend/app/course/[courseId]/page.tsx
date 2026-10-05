@@ -230,7 +230,13 @@ export default function CourseWorkspace() {
 
               <div className="flex-1 overflow-y-auto">
                 {view === "chat" && <ChatView topicId={activeTopicId} />}
-                {view === "quiz" && <QuizView topicId={activeTopicId} />}
+                {view === "quiz" && (
+                  <QuizView
+                    topicId={activeTopicId}
+                    refreshKey={sourcesRefreshKey}
+                    onAddSource={() => setShowUpload(true)}
+                  />
+                )}
                 {view === "graph" && (
                   <GraphView
                     courseId={tree.id}
