@@ -15,7 +15,7 @@ def topic_query(db: Session, user_id: Optional[int], course_id: Optional[int] = 
         db.query(Topic)
         .join(Module, Topic.module_id == Module.id)
         .join(Course, Module.course_id == Course.id)
-        .options(contains_eager(Topic.module))
+        .options(contains_eager(Topic.module).contains_eager(Module.course))
         .order_by(Course.id, Module.position, Topic.position)
     )
     if user_id is not None:
