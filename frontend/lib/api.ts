@@ -33,9 +33,51 @@ export interface User {
 export interface Topic {
   id: number;
   name: string;
-  course: string;
   description: string | null;
   created_at: string;
+  module_id: number;
+  position: number;
+  // Denormalised so "Course · Module" and course links need no extra fetch.
+  module_name: string;
+  course_id: number;
+  course_name: string;
+}
+
+export interface Course {
+  id: number;
+  name: string;
+  description: string | null;
+  created_at: string;
+  module_count: number;
+  topic_count: number;
+  avg_score: number;
+}
+
+export interface TreeTopic {
+  id: number;
+  name: string;
+  description: string | null;
+  position: number;
+  status: Mastery["status"];
+  score: number;
+  flagged_for_revision: boolean;
+}
+
+export interface TreeModule {
+  id: number;
+  name: string;
+  description: string | null;
+  position: number;
+  topics: TreeTopic[];
+}
+
+// A course with its modules in order, each with its topics in order.
+export interface CourseTree {
+  id: number;
+  name: string;
+  description: string | null;
+  created_at: string;
+  modules: TreeModule[];
 }
 
 export interface Mastery {
@@ -49,7 +91,10 @@ export interface Mastery {
 export interface GraphNode {
   id: number;
   name: string;
-  course: string;
+  course_id: number;
+  module_id: number;
+  module_name: string;
+  module_position: number;
   status: string;
   score: number;
 }
@@ -121,10 +166,50 @@ export const api = {
     return res.json() as Promise<{ access_token: string; token_type: string }>;
   },
   me: () => request<User>("/auth/me"),
+  listCourses: () => request<Course[]>("/courses"),
+  createCourse: (payload: { name: string; description?: string }) =>
+    request<Course>("/courses", { method: "POST", body: JSON.stringify(payload) }),
+  updateCourse: (courseId: number, payload: { name?: string; description?: string | null }) =>
+    request<Course>(`/courses/${courseId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteCourse: (courseId: number) =>
+    request<void>(`/courses/${courseId}`, { method: "DELETE" }),
+  getCourseTree: (courseId: number) => request<CourseTree>(`/courses/${courseId}/tree`),
+  createModule: (courseId: number, payload: { name: string; description?: string }) =>
+    request<TreeModule>(`/courses/${courseId}/modules`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  // The module routes that change structure answer with the refreshed tree.
+  updateModule: (
+    moduleId: number,
+    payload: { name?: string; description?: string | null; position?: number }
+  ) =>
+    request<CourseTree>(`/modules/${moduleId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteModule: (moduleId: number) =>
+    request<void>(`/modules/${moduleId}`, { method: "DELETE" }),
+  reorderModules: (courseId: number, ids: number[]) =>
+    request<CourseTree>(`/courses/${courseId}/modules/order`, {
+      method: "PUT",
+      body: JSON.stringify({ ids }),
+    }),
+  reorderTopics: (moduleId: number, ids: number[]) =>
+    request<CourseTree>(`/modules/${moduleId}/topics/order`, {
+      method: "PUT",
+      body: JSON.stringify({ ids }),
+    }),
   listTopics: () => request<Topic[]>("/topics"),
-  createTopic: (payload: { name: string; course: string; description?: string }) =>
+  createTopic: (payload: { name: string; module_id: number; description?: string }) =>
     request<Topic>("/topics", { method: "POST", body: JSON.stringify(payload) }),
-  getGraph: () => request<GraphData>("/topics/graph/json"),
+  updateTopic: (
+    topicId: number,
+    payload: { name?: string; description?: string | null; module_id?: number }
+  ) => request<Topic>(`/topics/${topicId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteTopic: (topicId: number) =>
+    request<void>(`/topics/${topicId}`, { method: "DELETE" }),
+  getGraph: (courseId?: number) =>
+    request<GraphData>(
+      courseId === undefined ? "/topics/graph/json" : `/topics/graph/json?course_id=${courseId}`
+    ),
   listMastery: () => request<Mastery[]>("/mastery"),
   markMissed: (topicId: number) =>
     request<Mastery>(`/mastery/${topicId}/missed`, { method: "POST" }),

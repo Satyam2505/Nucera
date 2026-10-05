@@ -1,11 +1,14 @@
-// Plain-Node tests for the pure graph modules (graph-model, graph-layout, graph-viewport) —
+// Plain-Node tests for the pure graph modules (graph-model, graph-layout, graph-viewport,
+// graph-modules) and the topic-grouping helpers in courses —
 // same approach as greeting.test.ts: only Node's built-in `assert`, no test
 // framework. To run ad hoc, Node's ESM loader needs explicit extensions:
-//   sed 's#"./graph-\([a-z]*\)"#"./graph-\1.ts"#' lib/graph.test.ts > lib/_run.test.ts \
+//   sed 's#"./\(graph-[a-z]*\|courses\)"#"./\1.ts"#' lib/graph.test.ts > lib/_run.test.ts \
 //     && node --experimental-strip-types lib/_run.test.ts; rm lib/_run.test.ts
 
 import assert from "node:assert/strict";
 
+import type { Topic } from "./api";
+import { courseHref, groupTopicsByModule, topicLocation } from "./courses";
 import {
   ancestors,
   buildModel,
@@ -25,6 +28,7 @@ import {
   saveViewport,
   type StorageLike,
 } from "./graph-layout";
+import { groupNodesByModule, moduleTintIndex, visibleNodes } from "./graph-modules";
 import {
   anyRectVisible,
   clampZoom,
@@ -212,29 +216,34 @@ test("default layout copes with 120 topics", () => {
 });
 
 // --- persistence ------------------------------------------------------------------
-test("layout round-trips per course and courses are independent", () => {
+test("layout round-trips per course id and courses are independent", () => {
   const s = memoryStorage();
-  saveLayout("DBMS", { 1: { x: 10, y: 20 } }, s);
-  saveLayout("DSA", { 1: { x: 99, y: 88 } }, s);
-  assert.deepEqual(loadLayout("DBMS", s), { 1: { x: 10, y: 20 } });
-  assert.deepEqual(loadLayout("DSA", s), { 1: { x: 99, y: 88 } });
-  clearLayout("DBMS", s);
-  assert.equal(loadLayout("DBMS", s), null);
-  assert.deepEqual(loadLayout("DSA", s), { 1: { x: 99, y: 88 } });
+  saveLayout(1, { 1: { x: 10, y: 20 } }, s);
+  saveLayout(2, { 1: { x: 99, y: 88 } }, s);
+  assert.deepEqual(loadLayout(1, s), { 1: { x: 10, y: 20 } });
+  assert.deepEqual(loadLayout(2, s), { 1: { x: 99, y: 88 } });
+  clearLayout(1, s);
+  assert.equal(loadLayout(1, s), null);
+  assert.deepEqual(loadLayout(2, s), { 1: { x: 99, y: 88 } });
+});
+test("old name-keyed layouts are never read as a course id", () => {
+  const s = memoryStorage();
+  s.setItem("nucera:graph-layout:DSA", JSON.stringify({ 1: { x: 1, y: 2 } }));
+  assert.equal(loadLayout(1, s), null);
 });
 test("corrupt or hostile stored layouts are ignored", () => {
   const s = memoryStorage();
-  s.setItem("nucera:graph-layout:A", "not json");
-  s.setItem("nucera:graph-layout:B", JSON.stringify({ 1: { x: "a", y: null }, 2: { x: Infinity, y: 0 } }));
-  s.setItem("nucera:graph-layout:C", JSON.stringify([1, 2]));
-  assert.equal(loadLayout("A", s), null);
-  assert.equal(loadLayout("B", s), null);
-  assert.equal(loadLayout("C", s), null);
+  s.setItem("nucera:graph-layout:course:1", "not json");
+  s.setItem("nucera:graph-layout:course:2", JSON.stringify({ 1: { x: "a", y: null }, 2: { x: Infinity, y: 0 } }));
+  s.setItem("nucera:graph-layout:course:3", JSON.stringify([1, 2]));
+  assert.equal(loadLayout(1, s), null);
+  assert.equal(loadLayout(2, s), null);
+  assert.equal(loadLayout(3, s), null);
 });
 test("missing storage never throws", () => {
-  assert.equal(loadLayout("X", null), null);
-  saveLayout("X", { 1: { x: 0, y: 0 } }, null);
-  clearLayout("X", null);
+  assert.equal(loadLayout(9, null), null);
+  saveLayout(9, { 1: { x: 0, y: 0 } }, null);
+  clearLayout(9, null);
 });
 test("storage that throws never breaks callers", () => {
   const bad: StorageLike = {
@@ -248,39 +257,40 @@ test("storage that throws never breaks callers", () => {
       throw new Error("blocked");
     },
   };
-  assert.equal(loadLayout("X", bad), null);
-  saveLayout("X", { 1: { x: 0, y: 0 } }, bad);
-  clearLayout("X", bad);
+  assert.equal(loadLayout(9, bad), null);
+  saveLayout(9, { 1: { x: 0, y: 0 } }, bad);
+  clearLayout(9, bad);
 });
 
 // --- viewport persistence -------------------------------------------------------
-test("viewport round-trips per course and is independent of node layout", () => {
+test("viewport round-trips per course id and is independent of node layout", () => {
   const s = memoryStorage();
-  saveViewport("DBMS", { x: 12.345, y: -80, zoom: 1.1234 }, s);
-  saveViewport("DSA", { x: 0, y: 0, zoom: 0.5 }, s);
-  assert.deepEqual(loadViewport("DBMS", s), { x: 12.35, y: -80, zoom: 1.123 });
-  assert.deepEqual(loadViewport("DSA", s), { x: 0, y: 0, zoom: 0.5 });
-  saveLayout("DBMS", { 1: { x: 1, y: 2 } }, s);
-  clearLayout("DBMS", s);
-  assert.notEqual(loadViewport("DBMS", s), null); // clearing positions leaves the camera alone
-  clearViewport("DBMS", s);
-  assert.equal(loadViewport("DBMS", s), null);
-  assert.notEqual(loadViewport("DSA", s), null);
+  saveViewport(1, { x: 12.345, y: -80, zoom: 1.1234 }, s);
+  saveViewport(2, { x: 0, y: 0, zoom: 0.5 }, s);
+  assert.deepEqual(loadViewport(1, s), { x: 12.35, y: -80, zoom: 1.123 });
+  assert.deepEqual(loadViewport(2, s), { x: 0, y: 0, zoom: 0.5 });
+  saveLayout(1, { 1: { x: 1, y: 2 } }, s);
+  clearLayout(1, s);
+  assert.notEqual(loadViewport(1, s), null); // clearing positions leaves the camera alone
+  clearViewport(1, s);
+  assert.equal(loadViewport(1, s), null);
+  assert.notEqual(loadViewport(2, s), null);
 });
 test("corrupt or hostile stored viewports are ignored", () => {
   const s = memoryStorage();
-  for (const [k, v] of [
-    ["A", "not json"],
-    ["B", JSON.stringify({ x: "1", y: 2, zoom: 1 })],
-    ["C", JSON.stringify({ x: 1, y: 2, zoom: 0 })],
-    ["D", JSON.stringify({ x: 1, y: 2, zoom: -3 })],
-    ["E", JSON.stringify(null)],
-    ["F", JSON.stringify([1, 2, 3])],
-  ]) {
-    s.setItem(`nucera:graph-viewport:${k}`, v);
-    assert.equal(loadViewport(k, s), null, k);
+  const cases: [number, string][] = [
+    [1, "not json"],
+    [2, JSON.stringify({ x: "1", y: 2, zoom: 1 })],
+    [3, JSON.stringify({ x: 1, y: 2, zoom: 0 })],
+    [4, JSON.stringify({ x: 1, y: 2, zoom: -3 })],
+    [5, JSON.stringify(null)],
+    [6, JSON.stringify([1, 2, 3])],
+  ];
+  for (const [id, v] of cases) {
+    s.setItem(`nucera:graph-viewport:course:${id}`, v);
+    assert.equal(loadViewport(id, s), null, String(id));
   }
-  assert.equal(loadViewport("X", null), null);
+  assert.equal(loadViewport(9, null), null);
 });
 test("viewport storage never throws when storage is blocked", () => {
   const bad: StorageLike = {
@@ -294,9 +304,94 @@ test("viewport storage never throws when storage is blocked", () => {
       throw new Error("blocked");
     },
   };
-  assert.equal(loadViewport("X", bad), null);
-  saveViewport("X", { x: 0, y: 0, zoom: 1 }, bad);
-  clearViewport("X", bad);
+  assert.equal(loadViewport(9, bad), null);
+  saveViewport(9, { x: 0, y: 0, zoom: 1 }, bad);
+  clearViewport(9, bad);
+});
+
+// --- module grouping -------------------------------------------------------------
+const moduleNodes = [
+  { id: 1, module_id: 20, module_name: "Trees", module_position: 1 },
+  { id: 2, module_id: 10, module_name: "Foundations", module_position: 0 },
+  { id: 3, module_id: 20, module_name: "Trees", module_position: 1 },
+  { id: 4, module_id: 30, module_name: "Sorting", module_position: 2 },
+];
+test("groupNodesByModule orders modules by course position and counts nodes", () => {
+  assert.deepEqual(groupNodesByModule(moduleNodes), [
+    { id: 10, name: "Foundations", position: 0, nodeCount: 1 },
+    { id: 20, name: "Trees", position: 1, nodeCount: 2 },
+    { id: 30, name: "Sorting", position: 2, nodeCount: 1 },
+  ]);
+  assert.deepEqual(groupNodesByModule([]), []);
+});
+test("groupNodesByModule breaks position ties by id", () => {
+  const tied = [
+    { module_id: 7, module_name: "B", module_position: 0 },
+    { module_id: 3, module_name: "A", module_position: 0 },
+  ];
+  assert.deepEqual(groupNodesByModule(tied).map((g) => g.id), [3, 7]);
+});
+test("moduleTintIndex follows course order, not node order", () => {
+  const index = moduleTintIndex(groupNodesByModule(moduleNodes));
+  assert.deepEqual([...index], [
+    [10, 0],
+    [20, 1],
+    [30, 2],
+  ]);
+});
+test("visibleNodes drops hidden modules and keeps the same array when none are hidden", () => {
+  assert.equal(visibleNodes(moduleNodes, new Set()), moduleNodes);
+  assert.deepEqual(visibleNodes(moduleNodes, new Set([20])).map((n) => n.id), [2, 4]);
+  assert.deepEqual(visibleNodes(moduleNodes, new Set([10, 20, 30])), []);
+});
+test("edges to hidden modules are ignored by the graph model", () => {
+  const shown = visibleNodes(
+    moduleNodes.map((n) => ({ ...n, status: "unmastered" })),
+    new Set([20])
+  );
+  const model = buildModel(shown, [
+    { source: 2, target: 1 },
+    { source: 2, target: 4 },
+  ]);
+  assert.deepEqual(model.dependents.get(2), [4]); // 2 -> 1 dropped: node 1 is hidden
+  assert.equal(model.prereqs.has(1), false);
+});
+
+// --- topic grouping (upload picker) ----------------------------------------------
+function topic(id: number, course: [number, string], module: [number, string]): Topic {
+  return {
+    id,
+    name: `T${id}`,
+    description: null,
+    created_at: "",
+    module_id: module[0],
+    position: 0,
+    module_name: module[1],
+    course_id: course[0],
+    course_name: course[1],
+  };
+}
+test("groupTopicsByModule keeps arrival order and splits by module", () => {
+  const math: [number, string] = [1, "Math"];
+  const groups = groupTopicsByModule([
+    topic(1, math, [10, "Algebra"]),
+    topic(2, math, [10, "Algebra"]),
+    topic(3, math, [11, "Geometry"]),
+    topic(4, [2, "Art"], [20, "Gallery"]),
+  ]);
+  assert.deepEqual(
+    groups.map((g) => [g.courseName, g.moduleName, g.topics.map((t) => t.id)]),
+    [
+      ["Math", "Algebra", [1, 2]],
+      ["Math", "Geometry", [3]],
+      ["Art", "Gallery", [4]],
+    ]
+  );
+  assert.deepEqual(groupTopicsByModule([]), []);
+});
+test("course links are by id and topics read as Course · Module", () => {
+  assert.equal(courseHref(42), "/course/42");
+  assert.equal(topicLocation({ course_name: "DSA", module_name: "Hashing" }), "DSA · Hashing");
 });
 
 // --- camera math -------------------------------------------------------------------

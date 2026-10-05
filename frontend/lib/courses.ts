@@ -1,27 +1,44 @@
-import { Mastery, Topic } from "./api";
+import type { Topic } from "./api";
 
-export interface CourseSummary {
-  name: string;
-  topics: Topic[];
-  avgScore: number;
+export function courseHref(courseId: number): string {
+  return `/course/${courseId}`;
 }
 
-export function summarizeCourses(
-  topics: Topic[],
-  masteryByTopic: Record<number, Mastery>
-): CourseSummary[] {
-  const byName = new Map<string, Topic[]>();
-  for (const topic of topics) {
-    byName.set(topic.course, [...(byName.get(topic.course) ?? []), topic]);
-  }
+/** "Course · Module" — shown under a topic name wherever topics from several courses mix. */
+export function topicLocation(topic: Pick<Topic, "course_name" | "module_name">): string {
+  return `${topic.course_name} · ${topic.module_name}`;
+}
 
-  return Array.from(byName.entries()).map(([name, courseTopics]) => {
-    const scores = courseTopics.map((t) => masteryByTopic[t.id]?.score ?? 0);
-    const avgScore = scores.length
-      ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
-      : 0;
-    return { name, topics: courseTopics, avgScore };
-  });
+export interface ModuleTopics {
+  courseId: number;
+  courseName: string;
+  moduleId: number;
+  moduleName: string;
+  topics: Topic[];
+}
+
+/**
+ * Groups topics by module, keeping the order they arrive in (the API sorts by
+ * course, module position, then topic position), so a picker can render
+ * course/module headings without re-sorting.
+ */
+export function groupTopicsByModule(topics: Topic[]): ModuleTopics[] {
+  const groups = new Map<number, ModuleTopics>();
+  for (const topic of topics) {
+    let group = groups.get(topic.module_id);
+    if (!group) {
+      group = {
+        courseId: topic.course_id,
+        courseName: topic.course_name,
+        moduleId: topic.module_id,
+        moduleName: topic.module_name,
+        topics: [],
+      };
+      groups.set(topic.module_id, group);
+    }
+    group.topics.push(topic);
+  }
+  return Array.from(groups.values());
 }
 
 // A small identity palette for course avatar badges — deliberately distinct

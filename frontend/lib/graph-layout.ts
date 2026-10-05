@@ -81,13 +81,13 @@ export function computeDefaultPositions(nodes: LayoutNode[], edges: LayoutEdge[]
   return positions;
 }
 
-// --- Persistence (localStorage, per course) ---------------------------------
+// --- Persistence (localStorage, keyed by course id) ---------------------------------
 // Node positions and the camera (pan + zoom) are stored under separate
 // Nucera-named keys so either can be cleared or invalid without affecting
 // the other.
 
-const KEY_PREFIX = "nucera:graph-layout:";
-const VIEWPORT_KEY_PREFIX = "nucera:graph-viewport:";
+const KEY_PREFIX = "nucera:graph-layout:course:";
+const VIEWPORT_KEY_PREFIX = "nucera:graph-viewport:course:";
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -103,15 +103,15 @@ function defaultStorage(): StorageLike | null {
   }
 }
 
-function keyFor(course: string): string {
-  return `${KEY_PREFIX}${course}`;
+function keyFor(courseId: number): string {
+  return `${KEY_PREFIX}${courseId}`;
 }
 
 /** Saved positions for a course, or null when none / unreadable / corrupt. */
-export function loadLayout(course: string, storage: StorageLike | null = defaultStorage()): Positions | null {
+export function loadLayout(courseId: number, storage: StorageLike | null = defaultStorage()): Positions | null {
   if (!storage) return null;
   try {
-    const raw = storage.getItem(keyFor(course));
+    const raw = storage.getItem(keyFor(courseId));
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
@@ -128,23 +128,23 @@ export function loadLayout(course: string, storage: StorageLike | null = default
   }
 }
 
-export function saveLayout(course: string, positions: Positions, storage: StorageLike | null = defaultStorage()): void {
+export function saveLayout(courseId: number, positions: Positions, storage: StorageLike | null = defaultStorage()): void {
   if (!storage) return;
   try {
     const rounded: Positions = {};
     for (const [id, p] of Object.entries(positions)) {
       rounded[Number(id)] = { x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 };
     }
-    storage.setItem(keyFor(course), JSON.stringify(rounded));
+    storage.setItem(keyFor(courseId), JSON.stringify(rounded));
   } catch {
     // Quota exceeded / storage blocked: the layout just won't persist.
   }
 }
 
-export function clearLayout(course: string, storage: StorageLike | null = defaultStorage()): void {
+export function clearLayout(courseId: number, storage: StorageLike | null = defaultStorage()): void {
   if (!storage) return;
   try {
-    storage.removeItem(keyFor(course));
+    storage.removeItem(keyFor(courseId));
   } catch {
     // ignore
   }
@@ -159,10 +159,10 @@ export interface SavedViewport {
 }
 
 /** Saved camera for a course, or null when none / unreadable / corrupt. */
-export function loadViewport(course: string, storage: StorageLike | null = defaultStorage()): SavedViewport | null {
+export function loadViewport(courseId: number, storage: StorageLike | null = defaultStorage()): SavedViewport | null {
   if (!storage) return null;
   try {
-    const raw = storage.getItem(`${VIEWPORT_KEY_PREFIX}${course}`);
+    const raw = storage.getItem(`${VIEWPORT_KEY_PREFIX}${courseId}`);
     if (!raw) return null;
     const v = JSON.parse(raw) as { x?: unknown; y?: unknown; zoom?: unknown } | null;
     if (
@@ -183,12 +183,12 @@ export function loadViewport(course: string, storage: StorageLike | null = defau
   }
 }
 
-export function saveViewport(course: string, viewport: SavedViewport, storage: StorageLike | null = defaultStorage()): void {
+export function saveViewport(courseId: number, viewport: SavedViewport, storage: StorageLike | null = defaultStorage()): void {
   if (!storage) return;
   try {
     const r = (n: number) => Math.round(n * 100) / 100;
     storage.setItem(
-      `${VIEWPORT_KEY_PREFIX}${course}`,
+      `${VIEWPORT_KEY_PREFIX}${courseId}`,
       JSON.stringify({ x: r(viewport.x), y: r(viewport.y), zoom: Math.round(viewport.zoom * 1000) / 1000 })
     );
   } catch {
@@ -196,10 +196,10 @@ export function saveViewport(course: string, viewport: SavedViewport, storage: S
   }
 }
 
-export function clearViewport(course: string, storage: StorageLike | null = defaultStorage()): void {
+export function clearViewport(courseId: number, storage: StorageLike | null = defaultStorage()): void {
   if (!storage) return;
   try {
-    storage.removeItem(`${VIEWPORT_KEY_PREFIX}${course}`);
+    storage.removeItem(`${VIEWPORT_KEY_PREFIX}${courseId}`);
   } catch {
     // ignore
   }

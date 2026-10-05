@@ -2,9 +2,10 @@
 
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from "react";
 
-import { api, GraphData, Mastery, Topic } from "./api";
+import { api, Course, GraphData, Mastery, Topic } from "./api";
 
 interface AppState {
+  courses: Course[];
   topics: Topic[];
   masteryByTopic: Record<number, Mastery>;
   graph: GraphData | null;
@@ -17,6 +18,7 @@ interface AppState {
 const AppStateContext = createContext<AppState | null>(null);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
+  const [courses, setCourses] = useState<Course[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [masteryByTopic, setMasteryByTopic] = useState<Record<number, Mastery>>({});
   const [graph, setGraph] = useState<GraphData | null>(null);
@@ -26,11 +28,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [topicsData, masteryData, graphData] = await Promise.all([
+      const [coursesData, topicsData, masteryData, graphData] = await Promise.all([
+        api.listCourses(),
         api.listTopics(),
         api.listMastery(),
         api.getGraph(),
       ]);
+      setCourses(coursesData);
       setTopics(topicsData);
       setMasteryByTopic(Object.fromEntries(masteryData.map((m) => [m.topic_id, m])));
       setGraph(graphData);
@@ -46,7 +50,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppStateContext.Provider
-      value={{ topics, masteryByTopic, graph, selectedTopicId, setSelectedTopicId, loading, refresh }}
+      value={{ courses, topics, masteryByTopic, graph, selectedTopicId, setSelectedTopicId, loading, refresh }}
     >
       {children}
     </AppStateContext.Provider>

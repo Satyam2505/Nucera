@@ -3,8 +3,8 @@
 // prerequisite graph) — no new fetches, no invented data. Kept separate
 // from app/page.tsx so the priority logic is testable on its own.
 
-import type { GraphData, Mastery, Topic } from "./api";
-import type { CourseSummary } from "./courses";
+import type { Course, GraphData, Mastery, Topic } from "./api";
+import { courseHref } from "./courses";
 import { getUnmasteredPrereqs } from "./graph-utils";
 import type { TimePeriod } from "./greeting";
 
@@ -20,10 +20,6 @@ const TIME_FALLBACK: Record<TimePeriod, string> = {
   evening: "A good time for a quick study session.",
   night: "Keep it light. A quick review might be enough.",
 };
-
-function courseHref(course: string): string {
-  return `/course/${encodeURIComponent(course)}`;
-}
 
 // "Touched" means the learner has actually done something with this topic —
 // a fresh topic's mastery row exists from the moment it's created (score 0,
@@ -53,7 +49,7 @@ export function getWelcomeContext(
   topics: Topic[],
   masteryByTopic: Record<number, Mastery>,
   graph: GraphData | null,
-  courses: CourseSummary[]
+  courses: Course[]
 ): WelcomeContext {
   if (courses.length === 0) {
     return { message: "What would you like to learn today?" };
@@ -68,8 +64,8 @@ export function getWelcomeContext(
     return { message: TIME_FALLBACK[period] };
   }
 
-  const course = courses.find((c) => c.name === recent.topic.course);
-  const contextLine = course ? `${course.name} · ${course.avgScore}% mastery` : undefined;
+  const course = courses.find((c) => c.id === recent.topic.course_id);
+  const contextLine = course ? `${course.name} · ${course.avg_score}% mastery` : undefined;
 
   // Graph is already loaded app-wide for the prerequisite view — this is a
   // single small walk over that in-memory data, not a new fetch or an
@@ -78,17 +74,19 @@ export function getWelcomeContext(
   if (gap) {
     return {
       message: `${gap.name} could use another look before you move ahead.`,
-      cta: { label: "Review topic", href: courseHref(gap.course) },
+      cta: { label: "Review topic", href: courseHref(gap.course_id) },
       contextLine,
     };
   }
 
   if (recent.mastery.status === "mastered") {
-    const hasMoreToLearn = course?.topics.some((t) => masteryByTopic[t.id]?.status !== "mastered") ?? false;
+    const hasMoreToLearn = topics.some(
+      (t) => t.course_id === recent.topic.course_id && masteryByTopic[t.id]?.status !== "mastered"
+    );
     return {
-      message: `You're making steady progress in ${recent.topic.course}.`,
+      message: `You're making steady progress in ${recent.topic.course_name}.`,
       cta: hasMoreToLearn
-        ? { label: `Continue ${recent.topic.course}`, href: courseHref(recent.topic.course) }
+        ? { label: `Continue ${recent.topic.course_name}`, href: courseHref(recent.topic.course_id) }
         : undefined,
       contextLine,
     };
@@ -96,7 +94,7 @@ export function getWelcomeContext(
 
   return {
     message: `Ready to continue ${recent.topic.name}?`,
-    cta: { label: `Continue ${recent.topic.course}`, href: courseHref(recent.topic.course) },
+    cta: { label: `Continue ${recent.topic.course_name}`, href: courseHref(recent.topic.course_id) },
     contextLine,
   };
 }
