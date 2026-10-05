@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/AuthContext";
 
 export default function AuthForm() {
-  const { login, register } = useAuth();
+  const { login, register, sessionExpired } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -80,6 +80,12 @@ export default function AuthForm() {
                 className="linen text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus-visible:ring-[rgba(var(--accent-rgb),0.30)]"
               />
             </div>
+
+            {sessionExpired && !error && (
+              <p role="status" className="text-xs text-stone-600 dark:text-stone-300">
+                Your session has expired. Please log in again.
+              </p>
+            )}
 
             {error && (
               <Alert variant="destructive" className="bg-[var(--error-bg)] border-[var(--error-border)]">

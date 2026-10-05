@@ -1,4 +1,5 @@
-import { getToken } from "./token";
+import { errorDetail, isSessionExpiry } from "./api-errors";
+import { clearToken, getToken } from "./token";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -7,29 +8,49 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// Keeps the same message as before; `status` lets callers tell "not found"
-// from a real failure without parsing it.
+// The message is the server's readable `detail` (never a JSON blob), so any
+// banner that shows `err.message` reads well; `status` lets callers tell "not
+// found" or "conflict" from a real failure without parsing anything.
 export class ApiError extends Error {
   constructor(
     public status: number,
-    body: string
+    public detail: string
   ) {
-    super(`API error ${status}: ${body}`);
+    super(detail);
     this.name = "ApiError";
   }
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    ...options,
-  });
+// Called when a request that carried a token is rejected with 401 (expired or
+// invalid token). AuthProvider registers it to drop back to the login screen.
+let onSessionExpired: (() => void) | null = null;
+
+export function setSessionExpiredHandler(handler: (() => void) | null) {
+  onSessionExpired = handler;
+}
+
+// The one place every response goes through — JSON calls, the login form post
+// and the file upload — so error text and sign-out handling can't diverge.
+async function handleResponse<T>(res: Response, sentToken: boolean): Promise<T> {
   if (!res.ok) {
     const body = await res.text();
-    throw new ApiError(res.status, body);
+    if (isSessionExpiry(res.status, sentToken)) {
+      clearToken();
+      onSessionExpired?.();
+    }
+    throw new ApiError(res.status, errorDetail(res.status, body));
   }
   if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers = authHeaders();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { "Content-Type": "application/json", ...headers },
+    ...options,
+  });
+  return handleResponse<T>(res, "Authorization" in headers);
 }
 
 export interface User {
@@ -174,8 +195,8 @@ export const api = {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
     });
-    if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
-    return res.json() as Promise<{ access_token: string; token_type: string }>;
+    // No token is sent, so a 401 here (wrong password) is just an error to show.
+    return handleResponse<{ access_token: string; token_type: string }>(res, false);
   },
   me: () => request<User>("/auth/me"),
   listCourses: () => request<Course[]>("/courses"),
@@ -243,13 +264,14 @@ export const api = {
     formData.append("topic_id", String(topicId));
     formData.append("source_type", sourceType);
     formData.append("file", file);
+    // No Content-Type here: the browser sets the multipart boundary itself.
+    const headers = authHeaders();
     const res = await fetch(`${API_URL}/sources/upload`, {
       method: "POST",
-      headers: authHeaders(),
+      headers,
       body: formData,
     });
-    if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
-    return res.json();
+    return handleResponse<Source>(res, "Authorization" in headers);
   },
   ask: (payload: { query: string; topic_id: number; history?: ChatTurn[] }) =>
     request<AskResponse>("/ask", { method: "POST", body: JSON.stringify(payload) }),
