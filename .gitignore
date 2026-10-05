@@ -23,3 +23,4 @@ Thumbs.db
 
 ## Claude Code (per-machine permission allowlist)
 .claude/settings.local.json
+backend/tests/test.db
