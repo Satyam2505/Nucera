@@ -292,11 +292,14 @@ def _add_topic_dependents(db_session, topic_id):
         models.Chunk(source_id=source.id, topic_id=topic_id, chunk_text="x", chunk_index=0)
     )
     db_session.add(models.StudySession(topic_id=topic_id, type=models.SessionType.quiz))
-    db_session.add(
-        models.QuizQuestion(
-            topic_id=topic_id, question_text="q", options={"A": "a"}, correct_option="A"
-        )
+    quiz_set = models.QuizSet(topic_id=topic_id)
+    quiz_set.questions.append(
+        models.QuizQuestion(position=0, question_text="q", options={"A": "a"}, correct_option="A")
     )
+    quiz_set.attempts.append(
+        models.QuizAttempt(correct=1, total=1, score_percent=100.0, score_delta=10, answers={})
+    )
+    db_session.add(quiz_set)
     db_session.commit()
 
 
@@ -311,7 +314,9 @@ def _row_counts(db_session):
             models.Source,
             models.Chunk,
             models.StudySession,
+            models.QuizSet,
             models.QuizQuestion,
+            models.QuizAttempt,
             models.Prerequisite,
         )
     }
@@ -365,7 +370,9 @@ def test_deleting_a_module_cascades_and_clears_prerequisites_in_both_directions(
     assert counts["sources"] == 1
     assert counts["chunks"] == 1
     assert counts["sessions"] == 1
+    assert counts["quiz_sets"] == 1
     assert counts["quiz_questions"] == 1
+    assert counts["quiz_attempts"] == 1
     assert counts["prerequisites"] == 0
 
 
@@ -392,7 +399,9 @@ def test_deleting_a_topic_cascades_and_clears_prerequisites_in_both_directions(
     assert counts["sources"] == 2
     assert counts["chunks"] == 2
     assert counts["sessions"] == 2
+    assert counts["quiz_sets"] == 2
     assert counts["quiz_questions"] == 2
+    assert counts["quiz_attempts"] == 2
     assert counts["prerequisites"] == 0
 
 

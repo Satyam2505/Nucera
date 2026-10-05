@@ -22,6 +22,15 @@ OLLAMA_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
 # results (see backend/tests and the milestone verification notes).
 RETRIEVAL_RELEVANCE_THRESHOLD = float(os.getenv("RETRIEVAL_RELEVANCE_THRESHOLD", "0.35"))
 
+# Quiz generation. Writing several questions takes a local CPU model much
+# longer than a tutor answer, hence its own (longer) timeout. The excerpt
+# limits keep the prompt within a small model's context.
+QUIZ_QUESTION_COUNT = int(os.getenv("QUIZ_QUESTION_COUNT", "5"))
+QUIZ_MIN_VALID_QUESTIONS = int(os.getenv("QUIZ_MIN_VALID_QUESTIONS", "3"))
+QUIZ_MAX_EXCERPTS = int(os.getenv("QUIZ_MAX_EXCERPTS", "8"))
+QUIZ_CONTEXT_CHAR_BUDGET = int(os.getenv("QUIZ_CONTEXT_CHAR_BUDGET", "9000"))
+QUIZ_LLM_TIMEOUT_SECONDS = float(os.getenv("QUIZ_LLM_TIMEOUT_SECONDS", "240"))
+
 # Auth. JWT_SECRET_KEY MUST be overridden via env in any real deployment —
 # the fallback only exists so local dev works out of the box on a single
 # machine with no other users.

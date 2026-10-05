@@ -26,21 +26,35 @@ class LLMResult:
     error: Optional[str] = None
 
 
-def generate(system_prompt: str, user_prompt: str, model: Optional[str] = None) -> LLMResult:
+def generate(
+    system_prompt: str,
+    user_prompt: str,
+    model: Optional[str] = None,
+    json_mode: bool = False,
+    timeout: Optional[float] = None,
+) -> LLMResult:
+    """`json_mode` asks Ollama to constrain the reply to valid JSON (the shape
+    is still up to the caller to validate). `timeout` overrides the default
+    for callers whose generations are longer than a chat answer.
+    """
     model_name = model or OLLAMA_MODEL
+
+    payload = {
+        "model": model_name,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "stream": False,
+    }
+    if json_mode:
+        payload["format"] = "json"
 
     try:
         response = requests.post(
             f"{OLLAMA_BASE_URL}/api/chat",
-            json={
-                "model": model_name,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "stream": False,
-            },
-            timeout=OLLAMA_TIMEOUT_SECONDS,
+            json=payload,
+            timeout=timeout if timeout is not None else OLLAMA_TIMEOUT_SECONDS,
         )
     except requests.exceptions.ConnectionError:
         return LLMResult(ok=False, error="Ollama is not running or unreachable.")

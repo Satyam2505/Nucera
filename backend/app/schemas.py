@@ -185,10 +185,17 @@ class SessionOut(BaseModel):
     timestamp: datetime
 
 
+class SourceCitation(BaseModel):
+    source: str
+    page: Optional[int] = None
+
+
 class QuizQuestionOut(BaseModel):
+    """A question as shown before it is graded: no key, no explanation."""
+
     model_config = ConfigDict(from_attributes=True)
     id: int
-    topic_id: int
+    position: int
     question_text: str
     options: dict
 
@@ -199,15 +206,48 @@ class QuizAnswer(BaseModel):
 
 
 class QuizSubmitRequest(BaseModel):
-    topic_id: int
+    quiz_set_id: int
     answers: List[QuizAnswer]
 
 
-class QuizSubmitResult(BaseModel):
-    total: int
+class QuizResultItem(BaseModel):
+    question_id: int
+    question_text: str
+    options: dict
+    chosen: Optional[str] = None
+    correct_option: str
+    is_correct: bool
+    explanation: Optional[str] = None
+    sources: List[SourceCitation] = []
+
+
+class QuizAttemptOut(BaseModel):
+    id: int
+    quiz_set_id: int
     correct: int
+    total: int
     score_percent: float
-    mastery: MasteryOut
+    score_delta: int
+    created_at: datetime
+    results: List[QuizResultItem]
+    # The topic's mastery as it stands now (after this attempt, if it is the latest).
+    mastery: Optional[MasteryOut] = None
+
+
+class QuizSetOut(BaseModel):
+    id: int
+    topic_id: int
+    created_at: datetime
+    questions: List[QuizQuestionOut]
+    # Present once the set has been graded; answers and explanations are only
+    # ever sent as part of it.
+    attempt: Optional[QuizAttemptOut] = None
+
+
+class QuizState(BaseModel):
+    quiz_set: Optional[QuizSetOut] = None
+    # Whether the topic has any study material to generate a quiz from.
+    has_material: bool
 
 
 class ChatTurn(BaseModel):
@@ -222,11 +262,6 @@ class AskRequest(BaseModel):
     # this in memory) — only the most recent few turns are used server-side.
     # Not persisted; see known limitations re: the sessions table.
     history: Optional[List[ChatTurn]] = None
-
-
-class SourceCitation(BaseModel):
-    source: str
-    page: Optional[int] = None
 
 
 class AskResponse(BaseModel):

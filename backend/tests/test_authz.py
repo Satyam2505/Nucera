@@ -56,11 +56,17 @@ ROUTES = [
         lambda w: {"json": {"topic_id": w["topic"], "type": "self_report", "score_delta": 50}},
     ),
     ("get-quiz", "get", lambda w: f"/quiz/{w['topic']}", lambda w: {}),
+    ("generate-quiz", "post", lambda w: f"/quiz/{w['topic']}/generate", lambda w: {}),
     (
         "submit-quiz",
         "post",
         lambda w: "/quiz/submit",
-        lambda w: {"json": {"topic_id": w["topic"], "answers": []}},
+        lambda w: {
+            "json": {
+                "quiz_set_id": w["quiz_set"],
+                "answers": [{"question_id": w["question"], "selected_option": "A"}],
+            }
+        },
     ),
     (
         "ask",
@@ -111,12 +117,20 @@ def world(client, db_session):
         embedding=[1.0] + [0.0] * (EMBEDDING_DIM - 1),
     )
     db_session.add(chunk)
+    quiz_set = models.QuizSet(topic_id=topic["id"])
+    question = models.QuizQuestion(
+        position=0, question_text="q", options={"A": "a", "B": "b"}, correct_option="A"
+    )
+    quiz_set.questions.append(question)
+    db_session.add(quiz_set)
     db_session.commit()
     mastery = client.put(f"/mastery/{topic['id']}", json={"score": 50}).json()
     return {
         "topic": topic["id"],
         "source": source.id,
         "chunk": chunk.id,
+        "quiz_set": quiz_set.id,
+        "question": question.id,
         "status": mastery["status"],
     }
 
@@ -152,6 +166,8 @@ def test_cross_user_attempts_change_nothing(world, client, other_client, db_sess
     assert count(models.Source) == 1
     assert count(models.Chunk) == 1
     assert count(models.StudySession) == 0
+    assert count(models.QuizSet) == 1  # nothing generated for A by B's attempt
+    assert count(models.QuizAttempt) == 0
     mastery = db_session.get(models.Mastery, world["topic"])
     assert mastery.score == 50
     assert mastery.status.value == world["status"]

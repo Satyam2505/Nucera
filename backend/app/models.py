@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -137,8 +138,11 @@ class Topic(Base):
     sessions = relationship(
         "StudySession", back_populates="topic", cascade="all, delete-orphan"
     )
-    quiz_questions = relationship(
-        "QuizQuestion", back_populates="topic", cascade="all, delete-orphan"
+    quiz_sets = relationship(
+        "QuizSet",
+        back_populates="topic",
+        cascade="all, delete-orphan",
+        order_by="QuizSet.id",
     )
 
     prerequisites = relationship(
@@ -239,14 +243,73 @@ class StudySession(Base):
     topic = relationship("Topic", back_populates="sessions")
 
 
+class QuizSet(Base):
+    """One generated quiz. Regenerating adds a new set rather than replacing
+    the old one, so earlier questions and their attempts stay as history.
+    The latest set (highest id) is the current quiz.
+    """
+
+    __tablename__ = "quiz_sets"
+
+    id = Column(Integer, primary_key=True)
+    topic_id = Column(
+        Integer, ForeignKey("topics.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    topic = relationship("Topic", back_populates="quiz_sets")
+    questions = relationship(
+        "QuizQuestion",
+        back_populates="quiz_set",
+        cascade="all, delete-orphan",
+        order_by="QuizQuestion.position",
+    )
+    attempts = relationship(
+        "QuizAttempt",
+        back_populates="quiz_set",
+        cascade="all, delete-orphan",
+        order_by="QuizAttempt.id",
+    )
+
+
 class QuizQuestion(Base):
     __tablename__ = "quiz_questions"
 
     id = Column(Integer, primary_key=True)
-    topic_id = Column(Integer, ForeignKey("topics.id", ondelete="CASCADE"), nullable=False)
+    quiz_set_id = Column(
+        Integer, ForeignKey("quiz_sets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    position = Column(Integer, nullable=False, default=0)
     question_text = Column(Text, nullable=False)
     options = Column(JSON, nullable=False)
     correct_option = Column(String(10), nullable=False)
+    explanation = Column(Text, nullable=True)
+    # Snapshot of where the question came from: [{"source": title, "page": n|None}].
+    # Built from the chunks the question cited (never from model-typed titles),
+    # and kept as text so it survives the source being deleted later.
+    sources = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    topic = relationship("Topic", back_populates="quiz_questions")
+    quiz_set = relationship("QuizSet", back_populates="questions")
+
+
+class QuizAttempt(Base):
+    """A graded submission of a quiz set. Per-question correctness is derived
+    from `answers` ({question_id: chosen option or None}) and the questions'
+    keys, so it is not stored twice. Ownership resolves through the set's topic.
+    """
+
+    __tablename__ = "quiz_attempts"
+
+    id = Column(Integer, primary_key=True)
+    quiz_set_id = Column(
+        Integer, ForeignKey("quiz_sets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    correct = Column(Integer, nullable=False)
+    total = Column(Integer, nullable=False)
+    score_percent = Column(Float, nullable=False)
+    score_delta = Column(Integer, nullable=False)
+    answers = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    quiz_set = relationship("QuizSet", back_populates="attempts")
