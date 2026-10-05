@@ -151,7 +151,8 @@ class IngestTextRequest(BaseModel):
     topic_id: int
     source_type: SourceType
     title: str
-    text: str
+    # Blank (or whitespace-only) text is a 422, not an empty source.
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class MasteryOut(BaseModel):

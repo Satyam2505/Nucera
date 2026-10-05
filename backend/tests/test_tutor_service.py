@@ -1,5 +1,6 @@
 import pytest
 
+from app.config import RETRIEVAL_RELEVANCE_THRESHOLD
 from app.services import llm_service
 from app.services.tutor_service import explanation_depth_for_score, generate_tutor_answer
 
@@ -67,6 +68,45 @@ def test_successful_answer_carries_citations_only_from_retrieved_chunks(monkeypa
         {"source": "DBMS_Module2.pdf", "page": 7},
         {"source": "DBMS_Module2.pdf", "page": 9},
     ]
+
+
+def test_only_chunks_at_or_above_the_threshold_are_cited(monkeypatch):
+    prompts = []
+
+    def fake_generate(system, user, model=None):
+        prompts.append(user)
+        return llm_service.LLMResult(ok=True, text="An answer.")
+
+    monkeypatch.setattr(llm_service, "generate", fake_generate)
+
+    retrieved = [
+        {"source": "A.pdf", "page": 1, "text": "Strong match text.", "similarity": 0.80},
+        {"source": "B.pdf", "page": 2, "text": "Borderline text.", "similarity": RETRIEVAL_RELEVANCE_THRESHOLD},
+        {"source": "C.pdf", "page": 3, "text": "Weak match text.", "similarity": RETRIEVAL_RELEVANCE_THRESHOLD - 0.01},
+        {"source": "D.pdf", "page": None, "text": "Noise text.", "similarity": 0.05},
+    ]
+    result = generate_tutor_answer(
+        question="Q?",
+        retrieved_chunks=retrieved,
+        topic_name="T",
+        topic_mastery_score=50,
+        prerequisite_gaps=[],
+    )
+
+    assert result.grounded is True
+    assert result.sources == [{"source": "A.pdf", "page": 1}, {"source": "B.pdf", "page": 2}]
+    # The prompt context is unchanged: every retrieved chunk is still given to the model.
+    assert all(text in prompts[0] for text in ("Strong match", "Borderline", "Weak match", "Noise"))
+
+
+def test_the_answer_gate_still_uses_only_the_top_match(monkeypatch):
+    monkeypatch.setattr(
+        llm_service, "generate", lambda system, user, model=None: llm_service.LLMResult(ok=True, text="ok")
+    )
+    # Best match is below the threshold -> no answer and no citations at all.
+    below = [{"source": "A.pdf", "page": 1, "text": "x", "similarity": RETRIEVAL_RELEVANCE_THRESHOLD - 0.1}]
+    result = generate_tutor_answer("Q?", below, "T", 50, [])
+    assert result.grounded is False and result.sources == []
 
 
 def test_llm_failure_returns_graceful_fallback_not_a_crash(monkeypatch):

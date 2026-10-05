@@ -39,6 +39,22 @@ def _split_sentences(text: str) -> List[str]:
     return sentences
 
 
+def _overlap_tail(text: str, overlap_chars: int) -> str:
+    """The last ~`overlap_chars` of `text`, starting on a word boundary.
+
+    A plain slice can begin in the middle of a word ("ord12 word13 ..."); the
+    partial word is dropped so the next chunk opens with a whole word. If the
+    tail contains no word break at all, there is nothing clean to carry over.
+    """
+    if not overlap_chars:
+        return ""
+    tail = text[-overlap_chars:]
+    if len(text) <= overlap_chars or text[-overlap_chars - 1].isspace() or tail[0].isspace():
+        return tail.strip()
+    boundary = re.search(r"\s", tail)
+    return tail[boundary.end() :].strip() if boundary else ""
+
+
 def chunk_text(
     text: str,
     max_chars: int = MAX_CHARS,
@@ -74,7 +90,7 @@ def chunk_text(
             continue
 
         chunks.append(current.strip())
-        tail = current[-overlap_chars:] if overlap_chars else ""
+        tail = _overlap_tail(current, overlap_chars)
         current = f"{tail} {sentence}".strip() if tail else sentence
 
     if current.strip():

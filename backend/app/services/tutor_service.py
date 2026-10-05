@@ -100,6 +100,13 @@ def generate_tutor_answer(
 
     # Citations are built from the retrieved chunks themselves, never from
     # whatever the model happened to say — so a citation can't be fabricated.
-    sources = [{"source": c["source"], "page": c.get("page")} for c in retrieved_chunks]
+    # Only chunks that clear the relevance threshold are cited: the answer is
+    # gated on the best match, but a weak chunk that merely came back in the
+    # top few isn't evidence the reader should be pointed at.
+    sources = [
+        {"source": c["source"], "page": c.get("page")}
+        for c in retrieved_chunks
+        if c["similarity"] >= RETRIEVAL_RELEVANCE_THRESHOLD
+    ]
 
     return TutorAnswer(answer=result.text, sources=sources, grounded=True)

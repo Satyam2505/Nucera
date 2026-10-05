@@ -152,9 +152,15 @@ export default function UploadModal({
             <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Or upload a file</Label>
             <Input
               type="file"
+              // What the server accepts; it still checks, this just keeps the picker honest.
+              accept=".pdf,.txt,.md"
+              aria-describedby="upload-file-hint"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               className="text-sm text-stone-600 dark:text-stone-300 file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--accent)] file:text-[var(--accent-ink)] file:px-3 file:py-1.5 file:text-xs hover:file:bg-[var(--accent-hover)] h-auto py-1.5"
             />
+            <p id="upload-file-hint" className="text-[11px] text-stone-500 dark:text-stone-400">
+              PDF, .txt or .md files.
+            </p>
           </div>
 
           <Button

@@ -22,6 +22,10 @@ OLLAMA_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
 # results (see backend/tests and the milestone verification notes).
 RETRIEVAL_RELEVANCE_THRESHOLD = float(os.getenv("RETRIEVAL_RELEVANCE_THRESHOLD", "0.35"))
 
+# Largest accepted upload. The cap protects the server (a file is read into
+# memory to extract its text), not the user's disk.
+UPLOAD_MAX_BYTES = int(float(os.getenv("MAX_UPLOAD_MB", "20")) * 1024 * 1024)
+
 # Quiz generation. Writing several questions takes a local CPU model much
 # longer than a tutor answer, hence its own (longer) timeout. The excerpt
 # limits keep the prompt within a small model's context.
