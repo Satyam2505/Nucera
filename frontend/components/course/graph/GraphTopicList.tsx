@@ -11,6 +11,7 @@ export interface TopicListItem {
   status: string;
   score: number;
   path: PathState;
+  moduleName: string;
 }
 
 const GROUP_ORDER: PathState[] = ["attention", "next", "later", "covered"];
@@ -61,7 +62,10 @@ export default function GraphTopicList({ topics, selectedId, onSelect }: Props) 
                       }`}
                     >
                       <StatusIcon status={status} size={14} />
-                      <span className="min-w-0 flex-1 truncate text-[var(--ink)]">{t.name}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[var(--ink)]">{t.name}</span>
+                        <span className="block truncate text-[11px] text-[var(--ink)]/50">{t.moduleName}</span>
+                      </span>
                       <span className="shrink-0 text-xs tabular-nums text-[var(--ink)]/60">
                         {STATUS_LABEL[status]}
                         {status !== "unmastered" ? ` · ${Math.round(t.score)}%` : ""}

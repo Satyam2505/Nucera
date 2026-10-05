@@ -1,24 +1,45 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
+import { groupTopicsByModule } from "@/lib/courses";
 
 const SOURCE_TYPES = ["official_upload", "self_supplied", "web_fallback"];
 
 const inputClass =
   "linen text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus-visible:ring-[rgba(var(--accent-rgb),0.30)]";
 
-export default function UploadModal({ onClose }: { onClose: () => void }) {
+export default function UploadModal({
+  onClose,
+  initialTopicId,
+}: {
+  onClose: () => void;
+  // The topic to preselect (the course page passes the one it is showing);
+  // falls back to the app-wide selection.
+  initialTopicId?: number | null;
+}) {
   const { topics, selectedTopicId, refresh } = useAppState();
-  const [topicId, setTopicId] = useState<number | null>(selectedTopicId);
+  const [topicId, setTopicId] = useState<number | null>(initialTopicId ?? selectedTopicId);
+  const groups = useMemo(() => groupTopicsByModule(topics), [topics]);
+  // Course names only earn their place in the headings when topics from
+  // several courses can appear in the picker.
+  const multipleCourses = new Set(groups.map((g) => g.courseId)).size > 1;
   const [sourceType, setSourceType] = useState(SOURCE_TYPES[1]);
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
@@ -61,18 +82,34 @@ export default function UploadModal({ onClose }: { onClose: () => void }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Topic</Label>
-            <Select value={topicId ? String(topicId) : ""} onValueChange={(v) => setTopicId(Number(v))}>
+            <Select
+              value={topicId ? String(topicId) : ""}
+              onValueChange={(v) => setTopicId(Number(v))}
+              disabled={topics.length === 0}
+            >
               <SelectTrigger className={`w-full ${inputClass}`}>
-                <SelectValue placeholder="Select a topic" />
+                <SelectValue placeholder={topics.length === 0 ? "No topics yet" : "Select a topic"} />
               </SelectTrigger>
               <SelectContent>
-                {topics.map((t) => (
-                  <SelectItem key={t.id} value={String(t.id)}>
-                    {t.name}
-                  </SelectItem>
+                {groups.map((group) => (
+                  <SelectGroup key={group.moduleId}>
+                    <SelectLabel>
+                      {multipleCourses ? `${group.courseName} · ${group.moduleName}` : group.moduleName}
+                    </SelectLabel>
+                    {group.topics.map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 ))}
               </SelectContent>
             </Select>
+            {topics.length === 0 && (
+              <p className="text-xs text-stone-500 dark:text-stone-400">
+                Add a module and a topic inside a course first, then attach sources to it.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">

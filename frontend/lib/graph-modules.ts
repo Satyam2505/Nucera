@@ -2,6 +2,15 @@
 // belongs to, a stable tint order, and the module filter. Visual-only —
 // like graph-layout, it never reads or writes academic state.
 
+// Soft hues for telling modules apart on the canvas. They are a visual aid
+// only: every card also carries its module number as text, and none of them
+// is a mastery-status color.
+export const MODULE_TINTS = ["#6c8ebf", "#c98b5b", "#7ba88b", "#a98bc9", "#c9a64b", "#5ba8b5"];
+
+export function tintFor(index: number): string {
+  return MODULE_TINTS[index % MODULE_TINTS.length];
+}
+
 export interface ModuleNode {
   module_id: number;
   module_name: string;

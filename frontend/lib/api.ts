@@ -7,6 +7,18 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// Keeps the same message as before; `status` lets callers tell "not found"
+// from a real failure without parsing it.
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    body: string
+  ) {
+    super(`API error ${status}: ${body}`);
+    this.name = "ApiError";
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -14,7 +26,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`API error ${res.status}: ${body}`);
+    throw new ApiError(res.status, body);
   }
   if (res.status === 204) return undefined as T;
   return res.json();

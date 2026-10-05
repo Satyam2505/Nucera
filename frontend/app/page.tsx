@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useAppState } from "@/lib/AppStateContext";
 import { useAuth } from "@/lib/AuthContext";
-import { summarizeCourses } from "@/lib/courses";
+import { courseHref, topicLocation } from "@/lib/courses";
 import { getGreeting, getTimePeriod } from "@/lib/greeting";
 import { useDynamicGreeting } from "@/lib/useDynamicGreeting";
 import { getWelcomeContext } from "@/lib/welcomeContext";
@@ -33,7 +33,7 @@ function BookmarkIcon({ filled }: { filled: boolean }) {
 }
 
 export default function LandingPage() {
-  const { topics, masteryByTopic, graph, loading, refresh } = useAppState();
+  const { courses, topics, masteryByTopic, graph, loading, refresh } = useAppState();
   const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -51,7 +51,6 @@ export default function LandingPage() {
     if (window.innerWidth < 768) setSidebarOpen(false);
   }, []);
 
-  const courses = useMemo(() => summarizeCourses(topics, masteryByTopic), [topics, masteryByTopic]);
   const filtered = query
     ? courses.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()))
     : courses;
@@ -161,9 +160,9 @@ export default function LandingPage() {
                     key={topic.id}
                     className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-[rgba(var(--ink-rgb),0.05)] transition group"
                   >
-                    <Link href={`/course/${encodeURIComponent(topic.course)}`} className="min-w-0 flex-1">
+                    <Link href={courseHref(topic.course_id)} className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-[var(--ink)] truncate">{topic.name}</p>
-                      <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{topic.course}</p>
+                      <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{topicLocation(topic)}</p>
                     </Link>
                     <button
                       onClick={() => toggleRevision(topic.id)}
@@ -191,12 +190,12 @@ export default function LandingPage() {
                   return (
                     <Link
                       key={topic.id}
-                      href={`/course/${encodeURIComponent(topic.course)}`}
+                      href={courseHref(topic.course_id)}
                       className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-[rgba(var(--ink-rgb),0.05)] transition"
                     >
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-[var(--ink)] truncate">{topic.name}</p>
-                        <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{topic.course}</p>
+                        <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{topicLocation(topic)}</p>
                       </div>
                       <Badge variant="outline" className="shrink-0 ml-3">
                         {mastery?.score ?? 0}%

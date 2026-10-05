@@ -28,7 +28,7 @@ import {
   saveViewport,
   type StorageLike,
 } from "./graph-layout";
-import { groupNodesByModule, moduleTintIndex, visibleNodes } from "./graph-modules";
+import { groupNodesByModule, MODULE_TINTS, moduleTintIndex, tintFor, visibleNodes } from "./graph-modules";
 import {
   anyRectVisible,
   clampZoom,
@@ -338,6 +338,12 @@ test("moduleTintIndex follows course order, not node order", () => {
     [20, 1],
     [30, 2],
   ]);
+});
+test("tintFor cycles through the palette for courses with many modules", () => {
+  assert.equal(tintFor(0), MODULE_TINTS[0]);
+  assert.equal(tintFor(MODULE_TINTS.length), MODULE_TINTS[0]);
+  assert.equal(tintFor(MODULE_TINTS.length + 2), MODULE_TINTS[2]);
+  assert.equal(new Set(MODULE_TINTS).size, MODULE_TINTS.length); // all distinct
 });
 test("visibleNodes drops hidden modules and keeps the same array when none are hidden", () => {
   assert.equal(visibleNodes(moduleNodes, new Set()), moduleNodes);

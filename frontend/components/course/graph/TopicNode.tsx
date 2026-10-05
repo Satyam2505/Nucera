@@ -15,6 +15,11 @@ export interface TopicNodeData {
   name: string;
   status: string;
   score: number;
+  // Which module the topic belongs to: 1-based number (shown as text), name
+  // (tooltip) and the tint used for the card's left stripe.
+  moduleNumber: number;
+  moduleName: string;
+  tint: string;
 }
 
 const OPACITY: Partial<Record<NodeRole, number>> = { dim: 0.72, muted: 0.45, faded: 0.14 };
@@ -56,7 +61,7 @@ function TopicNode({ data }: NodeProps<TopicNodeData>) {
         borderColor: path ? PATH_COLOR[path] : STATUS_COLOR[status],
         borderStyle: status === "unmastered" && !path ? "dashed" : "solid",
         borderWidth: 1.5,
-        boxShadow,
+        boxShadow: `${boxShadow}, inset 4px 0 0 ${data.tint}`,
         outline,
         outlineOffset: outline ? 3 : undefined,
         opacity,
@@ -79,6 +84,9 @@ function TopicNode({ data }: NodeProps<TopicNodeData>) {
           <span className="truncate">
             {path ? PATH_LABEL[path] : STATUS_LABEL[status]}
             {!path && status !== "unmastered" ? ` · ${score}%` : ""}
+          </span>
+          <span className="ml-auto shrink-0 text-[10px] tabular-nums text-[var(--ink)]/50" title={data.moduleName}>
+            M{data.moduleNumber}
           </span>
         </div>
         <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-[rgba(var(--ink-rgb),0.10)]" aria-hidden>

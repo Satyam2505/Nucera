@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
+import { courseHref } from "@/lib/courses";
 
 const inputClass =
   "linen text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus-visible:ring-[rgba(var(--accent-rgb),0.30)]";
@@ -19,25 +20,23 @@ export default function CreateCourseModal({ onClose }: { onClose: () => void }) 
   const { refresh } = useAppState();
   const router = useRouter();
   const [courseName, setCourseName] = useState("");
-  const [topicName, setTopicName] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!courseName.trim() || !topicName.trim()) return;
+    if (!courseName.trim() || submitting) return;
     setSubmitting(true);
     setError(null);
     try {
-      await api.createTopic({
-        name: topicName.trim(),
-        course: courseName.trim(),
+      const course = await api.createCourse({
+        name: courseName.trim(),
         description: description.trim() || undefined,
       });
       await refresh();
       onClose();
-      router.push(`/course/${encodeURIComponent(courseName.trim())}`);
+      router.push(courseHref(course.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create course");
     } finally {
@@ -53,26 +52,25 @@ export default function CreateCourseModal({ onClose }: { onClose: () => void }) 
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Course name</Label>
+            <Label htmlFor="course-name" className="text-xs font-medium text-stone-600 dark:text-stone-300">
+              Course name
+            </Label>
             <Input
+              id="course-name"
+              autoFocus
               className={inputClass}
               value={courseName}
               onChange={(e) => setCourseName(e.target.value)}
               placeholder="e.g. Operating Systems"
+              maxLength={255}
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">First topic name</Label>
-            <Input
-              className={inputClass}
-              value={topicName}
-              onChange={(e) => setTopicName(e.target.value)}
-              placeholder="e.g. Processes and Threads"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Description (optional)</Label>
+            <Label htmlFor="course-description" className="text-xs font-medium text-stone-600 dark:text-stone-300">
+              Description (optional)
+            </Label>
             <Textarea
+              id="course-description"
               className={`${inputClass} h-20`}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -80,7 +78,7 @@ export default function CreateCourseModal({ onClose }: { onClose: () => void }) 
           </div>
           <Button
             type="submit"
-            disabled={submitting || !courseName.trim() || !topicName.trim()}
+            disabled={submitting || !courseName.trim()}
             className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-ink)] h-auto py-2.5 accent-ring"
           >
             {submitting ? "Creating..." : "Create course"}
@@ -91,7 +89,7 @@ export default function CreateCourseModal({ onClose }: { onClose: () => void }) 
             </Alert>
           )}
           <p className="text-[11px] text-stone-500 dark:text-stone-400 text-center">
-            You can add more topics and prerequisites to it from inside the course.
+            You&apos;ll add modules and topics from inside the course.
           </p>
         </form>
       </DialogContent>

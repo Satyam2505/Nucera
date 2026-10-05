@@ -16,7 +16,8 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
-import { badgeColorFor, CourseSummary } from "@/lib/courses";
+import type { Course } from "@/lib/api";
+import { badgeColorFor, courseHref } from "@/lib/courses";
 
 import AccountMenu from "./AccountMenu";
 import ThemeToggle from "./ThemeToggle";
@@ -38,6 +39,10 @@ function SearchIcon() {
   );
 }
 
+function countLabel(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 export default function AppSidebar({
   courses,
   loading,
@@ -45,7 +50,7 @@ export default function AppSidebar({
   query,
   onQueryChange,
 }: {
-  courses: CourseSummary[];
+  courses: Course[];
   loading: boolean;
   onNewCourse: () => void;
   query: string;
@@ -107,16 +112,21 @@ export default function AppSidebar({
               {courses.map((course) => {
                 const badge = badgeColorFor(course.name);
                 return (
-                  <SidebarMenuItem key={course.name}>
-                    <SidebarMenuButton asChild tooltip={course.name} className="group-data-[collapsible=icon]:p-1!">
-                      <Link href={`/course/${encodeURIComponent(course.name)}`}>
+                  <SidebarMenuItem key={course.id}>
+                    <SidebarMenuButton asChild tooltip={course.name} className="group-data-[collapsible=icon]:p-1! h-auto py-1.5">
+                      <Link href={courseHref(course.id)}>
                         <span
                           className="h-6 w-6 rounded-md border flex items-center justify-center text-[10px] font-semibold shrink-0"
                           style={{ background: badge.bg, borderColor: badge.border, color: badge.text }}
                         >
                           {course.name.charAt(0).toUpperCase()}
                         </span>
-                        <span className="truncate">{course.name}</span>
+                        <span className="min-w-0">
+                          <span className="block truncate">{course.name}</span>
+                          <span className="block truncate text-[11px] text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
+                            {countLabel(course.module_count, "module")} · {countLabel(course.topic_count, "topic")}
+                          </span>
+                        </span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

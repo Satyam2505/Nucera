@@ -43,6 +43,7 @@ import {
   neighborhood,
   type PathState,
 } from "@/lib/graph-model";
+import { groupNodesByModule, moduleTintIndex, tintFor, visibleNodes } from "@/lib/graph-modules";
 import { anyRectVisible, clampZoom, rectFits, revealDelta, unionRects, type Rect } from "@/lib/graph-viewport";
 import { STATUS_COLOR, STATUS_LABEL, type MasteryStatusKey } from "@/lib/status-colors";
 
@@ -87,20 +88,20 @@ export type GraphOpenView = "chat" | "quiz";
 type MoveIntent = "default" | "persist" | "transient";
 
 interface Props {
-  courseName: string;
+  courseId: number;
   onOpenTopic?: (topicId: number, view: GraphOpenView) => void;
 }
 
-export default function GraphView({ courseName, onOpenTopic }: Props) {
+export default function GraphView({ courseId, onOpenTopic }: Props) {
   const { graph } = useAppState();
 
   const data = useMemo<GraphData | null>(() => {
     if (!graph) return null;
-    const nodes = graph.nodes.filter((n) => n.course === courseName);
+    const nodes = graph.nodes.filter((n) => n.course_id === courseId);
     const ids = new Set(nodes.map((n) => n.id));
     const edges = graph.edges.filter((e) => ids.has(e.source) && ids.has(e.target));
     return { nodes, edges };
-  }, [graph, courseName]);
+  }, [graph, courseId]);
 
   if (!data) return <p className="p-6 text-sm text-stone-500 dark:text-stone-400">Loading graph...</p>;
   if (data.nodes.length === 0) {
@@ -109,8 +110,8 @@ export default function GraphView({ courseName, onOpenTopic }: Props) {
 
   // Keyed by course so each course gets its own canvas state and layout.
   return (
-    <ReactFlowProvider key={courseName}>
-      <GraphCanvas courseName={courseName} data={data} onOpenTopic={onOpenTopic} />
+    <ReactFlowProvider key={courseId}>
+      <GraphCanvas courseId={courseId} data={data} onOpenTopic={onOpenTopic} />
     </ReactFlowProvider>
   );
 }
@@ -128,26 +129,38 @@ function nodeRect(n: Node, vp: Viewport): Rect {
 function toNodes(
   data: GraphData,
   positions: Positions,
+  tintIndex: Map<number, number>,
+  hiddenModules: ReadonlySet<number>,
   previous?: Node<TopicNodeData>[]
 ): Node<TopicNodeData>[] {
   const old = new Map((previous ?? []).map((n) => [n.id, n]));
   return data.nodes.map((n) => {
     const id = String(n.id);
-    const nodeData: TopicNodeData = { topicId: n.id, name: n.name, status: n.status, score: n.score };
+    const moduleIndex = tintIndex.get(n.module_id) ?? 0;
+    const nodeData: TopicNodeData = {
+      topicId: n.id,
+      name: n.name,
+      status: n.status,
+      score: n.score,
+      moduleNumber: moduleIndex + 1,
+      moduleName: n.module_name,
+      tint: tintFor(moduleIndex),
+    };
+    const hidden = hiddenModules.has(n.module_id);
     const existing = old.get(id);
     // Existing nodes keep their current (possibly user-dragged) position and
     // measured size; only their academic display data refreshes.
-    if (existing) return { ...existing, data: nodeData };
-    return { id, type: "topic", position: positions[n.id] ?? { x: 0, y: 0 }, data: nodeData };
+    if (existing) return { ...existing, data: nodeData, hidden };
+    return { id, type: "topic", position: positions[n.id] ?? { x: 0, y: 0 }, data: nodeData, hidden };
   });
 }
 
 function GraphCanvas({
-  courseName,
+  courseId,
   data,
   onOpenTopic,
 }: {
-  courseName: string;
+  courseId: number;
   data: GraphData;
   onOpenTopic?: Props["onOpenTopic"];
 }) {
@@ -160,19 +173,24 @@ function GraphCanvas({
   flowRef.current = flow;
   const storeApi = useStoreApi();
 
+  // --- modules (visual grouping + filter; never changes academic data) -------
+  const moduleGroups = useMemo(() => groupNodesByModule(data.nodes), [data]);
+  const tintIndex = useMemo(() => moduleTintIndex(moduleGroups), [moduleGroups]);
+  const [hiddenModules, setHiddenModules] = useState<ReadonlySet<number>>(() => new Set());
+
   // --- visual state (separate from academic data) ---------------------------
   const [nodes, setNodes] = useState<Node<TopicNodeData>[]>(() => {
-    const saved = loadLayout(courseName);
+    const saved = loadLayout(courseId);
     const defaults = computeDefaultPositions(data.nodes, data.edges);
     const merged: Positions = {};
     for (const n of data.nodes) merged[n.id] = saved?.[n.id] ?? defaults[n.id];
-    return toNodes(data, merged);
+    return toNodes(data, merged, moduleTintIndex(groupNodesByModule(data.nodes)), new Set());
   });
   const [initialViewport] = useState<SavedViewport | null>(() => {
-    const saved = loadViewport(courseName);
+    const saved = loadViewport(courseId);
     return saved ? { ...saved, zoom: clampZoom(saved.zoom, MIN_ZOOM, MAX_ZOOM) } : null;
   });
-  const [customized, setCustomized] = useState(() => loadLayout(courseName) !== null);
+  const [customized, setCustomized] = useState(() => loadLayout(courseId) !== null);
   const [viewportSaved, setViewportSaved] = useState(initialViewport !== null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
@@ -189,16 +207,17 @@ function GraphCanvas({
   const settleTimerRef = useRef<number | undefined>(undefined);
 
   // Academic data refreshes (e.g. after a quiz) update each card's mastery
-  // display but never its position.
+  // display but never its position; hiding a module only flips `hidden`, so
+  // its cards keep their places when it is shown again.
   useEffect(() => {
     setNodes((prev) => {
-      const saved = loadLayout(courseName);
+      const saved = loadLayout(courseId);
       const defaults = computeDefaultPositions(data.nodes, data.edges);
       const positions: Positions = {};
       for (const n of data.nodes) positions[n.id] = saved?.[n.id] ?? defaults[n.id];
-      return toNodes(data, positions, prev);
+      return toNodes(data, positions, tintIndex, hiddenModules, prev);
     });
-  }, [data, courseName]);
+  }, [data, courseId, tintIndex, hiddenModules]);
 
   // --- academic-derived, read-only ----------------------------------------------
   const model = useMemo(() => buildModel(data.nodes, data.edges), [data]);
@@ -215,12 +234,15 @@ function GraphCanvas({
         selectable: false,
         focusable: false,
         updatable: false,
+        hidden:
+          hiddenModules.has(nameById.get(e.source)?.module_id ?? -1) ||
+          hiddenModules.has(nameById.get(e.target)?.module_id ?? -1),
         data: {
           sourceName: nameById.get(e.source)?.name ?? "",
           targetName: nameById.get(e.target)?.name ?? "",
         },
       })),
-    [data, nameById]
+    [data, nameById, hiddenModules]
   );
 
   const highlight = useMemo(
@@ -271,15 +293,15 @@ function GraphCanvas({
       if (intent === "transient") return;
       settleTimerRef.current = window.setTimeout(() => {
         if (intent === "default") {
-          clearViewport(courseName);
+          clearViewport(courseId);
           setViewportSaved(false);
         } else {
-          saveViewport(courseName, getViewport());
+          saveViewport(courseId, getViewport());
           setViewportSaved(true);
         }
       }, ms + 80);
     },
-    [courseName, getViewport]
+    [courseId, getViewport]
   );
 
   useEffect(() => () => window.clearTimeout(settleTimerRef.current), []);
@@ -363,10 +385,10 @@ function GraphCanvas({
   const onMoveEnd = useCallback(
     (_event: unknown, viewport: Viewport) => {
       window.clearTimeout(settleTimerRef.current);
-      saveViewport(courseName, viewport);
+      saveViewport(courseId, viewport);
       setViewportSaved(true);
     },
-    [courseName]
+    [courseId]
   );
 
   // A saved camera can outlive the layout it was saved for (topics moved or
@@ -378,7 +400,7 @@ function GraphCanvas({
     const visible: Rect = { left: 0, top: 0, right: el.clientWidth, bottom: el.clientHeight };
     const vp: Viewport = initialViewport;
     if (anyRectVisible(nodesRef.current.map((n) => nodeRect(n, vp)), visible)) return;
-    clearViewport(courseName);
+    clearViewport(courseId);
     setViewportSaved(false);
     let tries = 0;
     let frame = 0;
@@ -416,21 +438,21 @@ function GraphCanvas({
     // Persist once, at the end of the drag — never per pixel.
     const positions: Positions = {};
     for (const n of nodesRef.current) positions[Number(n.id)] = n.position;
-    saveLayout(courseName, positions);
+    saveLayout(courseId, positions);
     setCustomized(true);
-  }, [courseName]);
+  }, [courseId]);
 
   // Reset everything visual: node positions, saved camera and zoom.
   const resetLayout = useCallback(() => {
-    clearLayout(courseName);
-    clearViewport(courseName);
+    clearLayout(courseId);
+    clearViewport(courseId);
     setCustomized(false);
     setViewportSaved(false);
     setFocusId(null);
     const defaults = computeDefaultPositions(data.nodes, data.edges);
     setNodes((current) => current.map((n) => ({ ...n, position: defaults[Number(n.id)] ?? n.position })));
     fitAll();
-  }, [courseName, data, fitAll]);
+  }, [courseId, data, fitAll]);
 
   // --- selection ----------------------------------------------------------------------
   const onNodeClick = useCallback((_: unknown, node: Node) => {
@@ -483,15 +505,48 @@ function GraphCanvas({
 
   const topicList = useMemo<TopicListItem[]>(
     () =>
-      data.nodes.map((n) => ({
+      visibleNodes(data.nodes, hiddenModules).map((n) => ({
         id: n.id,
         name: n.name,
         status: n.status,
         score: n.score,
         path: allPathStates.get(n.id) ?? "later",
+        moduleName: n.module_name,
       })),
-    [data, allPathStates]
+    [data, allPathStates, hiddenModules]
   );
+
+  // Show or hide one module's cards. Anything selected or focused inside a
+  // module that is being hidden is cleared so no panel points at a card that
+  // is no longer on the canvas.
+  const toggleModule = useCallback(
+    (moduleId: number) => {
+      const next = new Set(hiddenModules);
+      if (next.has(moduleId)) {
+        next.delete(moduleId);
+      } else {
+        next.add(moduleId);
+        const owns = (topicId: number | null) =>
+          topicId !== null && nameById.get(topicId)?.module_id === moduleId;
+        if (owns(selectedId)) setSelectedId(null);
+        if (owns(focusId)) setFocusId(null);
+      }
+      setHiddenModules(next);
+    },
+    [hiddenModules, nameById, selectedId, focusId]
+  );
+
+  // Refit the camera to whatever is visible after the filter changes. Comparing
+  // against the last-seen set (rather than a "mounted" flag) keeps the
+  // restored camera on first render, including under StrictMode's re-run.
+  const fitAllRef = useRef(fitAll);
+  fitAllRef.current = fitAll;
+  const seenHiddenRef = useRef(hiddenModules);
+  useEffect(() => {
+    if (seenHiddenRef.current === hiddenModules) return;
+    seenHiddenRef.current = hiddenModules;
+    fitAllRef.current();
+  }, [hiddenModules]);
 
   // Picking a topic from the list selects it on the map and scrolls the map
   // back into view.
@@ -529,6 +584,37 @@ function GraphCanvas({
                   </li>
                 ))}
           </ul>
+
+          {moduleGroups.length > 1 && (
+            <ul className="flex flex-wrap items-center gap-1.5" aria-label="Filter by module">
+              {moduleGroups.map((group, index) => {
+                const shown = !hiddenModules.has(group.id);
+                return (
+                  <li key={group.id}>
+                    <button
+                      type="button"
+                      aria-pressed={shown}
+                      onClick={() => toggleModule(group.id)}
+                      title={shown ? `Hide ${group.name}` : `Show ${group.name}`}
+                      className={`flex max-w-44 items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--accent-rgb),0.45)] ${
+                        shown
+                          ? "border-[rgba(var(--ink-rgb),0.18)] text-[var(--ink)]"
+                          : "border-dashed border-[rgba(var(--ink-rgb),0.18)] text-[var(--ink)]/45 line-through"
+                      }`}
+                    >
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ background: tintFor(index), opacity: shown ? 1 : 0.4 }}
+                        aria-hidden
+                      />
+                      <span className="shrink-0 tabular-nums">{index + 1}.</span>
+                      <span className="truncate">{group.name}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
 
           <div className="ml-auto flex items-center gap-1.5">
             <span className="mr-2 hidden text-[11px] text-[var(--ink)]/45 xl:inline">
