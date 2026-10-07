@@ -1,4 +1,6 @@
 import { errorDetail, isSessionExpiry } from "./api-errors";
+import { parseStreamEvent, SavedChatMessage, StreamDone } from "./chat";
+import { readNdjson } from "./ndjson";
 import { clearToken, getToken } from "./token";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -202,11 +204,6 @@ export interface Source {
   chunk_count: number;
 }
 
-export interface ChatTurn {
-  role: "user" | "assistant";
-  text: string;
-}
-
 export interface AskResponse {
   answer: string;
   flagged_prerequisites: Topic[];
@@ -305,8 +302,36 @@ export const api = {
     });
     return handleResponse<Source>(res, "Authorization" in headers);
   },
-  ask: (payload: { query: string; topic_id: number; history?: ChatTurn[] }) =>
+  ask: (payload: { query: string; topic_id: number }) =>
     request<AskResponse>("/ask", { method: "POST", body: JSON.stringify(payload) }),
+  // The answer as it is written: `onToken` gets each piece, and the promise
+  // resolves with the final answer, citations and prerequisite gaps. Aborting
+  // `signal` closes the connection, which also stops the model.
+  askStream: async (
+    payload: { query: string; topic_id: number },
+    options: { onToken: (text: string) => void; signal?: AbortSignal }
+  ): Promise<StreamDone> => {
+    const headers = authHeaders();
+    const res = await fetch(`${API_URL}/ask/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(payload),
+      signal: options.signal,
+    });
+    if (!res.ok) return handleResponse<StreamDone>(res, "Authorization" in headers);
+    if (!res.body) throw new ApiError(0, "Your browser can't read streamed answers.");
+
+    let done: StreamDone | null = null;
+    await readNdjson(res.body, parseStreamEvent, (event) => {
+      if (event.type === "token") options.onToken(event.text);
+      else if (event.type === "done") done = event;
+      else throw new ApiError(500, event.message);
+    });
+    if (!done) throw new ApiError(0, "The answer was interrupted before it finished.");
+    return done;
+  },
+  getChat: (topicId: number) => request<SavedChatMessage[]>(`/chat/${topicId}`),
+  clearChat: (topicId: number) => request<void>(`/chat/${topicId}`, { method: "DELETE" }),
   listSources: (topicId: number) => request<Source[]>(`/sources/topic/${topicId}`),
   deleteSource: (sourceId: number) =>
     request<void>(`/sources/${sourceId}`, { method: "DELETE" }),
