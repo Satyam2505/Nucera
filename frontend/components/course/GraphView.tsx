@@ -18,8 +18,9 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 
 import { Button } from "@/components/ui/button";
-import type { GraphData } from "@/lib/api";
+import { api, type GraphData } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
+import { candidatePrerequisites } from "@/lib/graph-edit";
 import {
   clearLayout,
   clearViewport,
@@ -221,6 +222,7 @@ function GraphCanvas({
 
   // --- academic-derived, read-only ----------------------------------------------
   const model = useMemo(() => buildModel(data.nodes, data.edges), [data]);
+  const { refresh } = useAppState();
   const allPathStates = useMemo(() => computePathStates(model), [model]);
   const nameById = useMemo(() => new Map(data.nodes.map((n) => [n.id, n])), [data]);
 
@@ -503,6 +505,38 @@ function GraphCanvas({
     return { id: n.id, name: n.name, status: n.status, score: n.score };
   };
 
+  // Editing the selected topic's prerequisites. The picker only offers topics that
+  // can't make a loop (the server checks again); after a change the whole graph is
+  // reloaded, so the edges, the learning path and the tutor's gaps all agree.
+  const prerequisiteCandidates = useMemo(
+    () =>
+      selectedId === null
+        ? []
+        : candidatePrerequisites(
+            data.nodes.map((n) => ({ id: n.id, name: n.name, module_name: n.module_name })),
+            selectedId,
+            model.prereqs.get(selectedId) ?? [],
+            descendants(model, selectedId)
+          ),
+    [data.nodes, model, selectedId]
+  );
+  const addPrerequisite = useCallback(
+    async (prerequisiteId: number) => {
+      if (selectedId === null) return;
+      await api.addPrerequisite(selectedId, prerequisiteId);
+      await refresh();
+    },
+    [selectedId, refresh]
+  );
+  const removePrerequisite = useCallback(
+    async (prerequisiteId: number) => {
+      if (selectedId === null) return;
+      await api.removePrerequisite(selectedId, prerequisiteId);
+      await refresh();
+    },
+    [selectedId, refresh]
+  );
+
   const topicList = useMemo<TopicListItem[]>(
     () =>
       visibleNodes(data.nodes, hiddenModules).map((n) => ({
@@ -756,6 +790,9 @@ function GraphCanvas({
               totalBefore={ancestors(model, selectedId).size}
               totalAfter={descendants(model, selectedId).size}
               isFocused={focusId === selectedId}
+              candidates={prerequisiteCandidates}
+              onAddPrerequisite={addPrerequisite}
+              onRemovePrerequisite={removePrerequisite}
               onClose={clearAll}
               onSelectTopic={selectFromPanel}
               onFocus={() => enterFocus(selectedId)}

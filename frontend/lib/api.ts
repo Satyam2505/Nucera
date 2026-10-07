@@ -311,6 +311,15 @@ export const api = {
     request<GraphData>(
       courseId === undefined ? "/topics/graph/json" : `/topics/graph/json?course_id=${courseId}`
     ),
+  // `prerequisiteTopicId` must be learned before `topicId`. The server refuses a
+  // link that would make a loop (400 with a readable message).
+  addPrerequisite: (topicId: number, prerequisiteTopicId: number) =>
+    request<{ status: string }>("/topics/prerequisites", {
+      method: "POST",
+      body: JSON.stringify({ topic_id: topicId, prerequisite_topic_id: prerequisiteTopicId }),
+    }),
+  removePrerequisite: (topicId: number, prerequisiteTopicId: number) =>
+    request<void>(`/topics/${topicId}/prerequisites/${prerequisiteTopicId}`, { method: "DELETE" }),
   listMastery: () => request<Mastery[]>("/mastery"),
   markMissed: (topicId: number) =>
     request<Mastery>(`/mastery/${topicId}/missed`, { method: "POST" }),

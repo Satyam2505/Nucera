@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { Button } from "@/components/ui/button";
+import { candidateLabel, editErrorText, type EditableTopic } from "@/lib/graph-edit";
 import type { PathState } from "@/lib/graph-model";
 import { STATUS_COLOR, STATUS_LABEL } from "@/lib/status-colors";
 
@@ -21,6 +24,10 @@ interface Props {
   totalBefore: number;
   totalAfter: number;
   isFocused: boolean;
+  // Topics that may be added as a prerequisite (never one that would make a loop).
+  candidates: EditableTopic[];
+  onAddPrerequisite: (prerequisiteId: number) => Promise<void>;
+  onRemovePrerequisite: (prerequisiteId: number) => Promise<void>;
   onClose: () => void;
   onSelectTopic: (id: number) => void;
   onFocus: () => void;
@@ -29,19 +36,44 @@ interface Props {
   onQuiz: () => void;
 }
 
-function TopicLink({ topic, onSelect }: { topic: PanelTopic; onSelect: (id: number) => void }) {
+function TopicLink({
+  topic,
+  onSelect,
+  onRemove,
+  removeDisabled,
+}: {
+  topic: PanelTopic;
+  onSelect: (id: number) => void;
+  // Given only for the rows that can be removed (the topic's own prerequisites).
+  onRemove?: (id: number) => void;
+  removeDisabled?: boolean;
+}) {
   const status = normalizeStatus(topic.status);
   return (
-    <li>
+    <li className="flex items-center gap-1">
       <button
         type="button"
         onClick={() => onSelect(topic.id)}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-[var(--ink)] transition hover:bg-[rgba(var(--ink-rgb),0.06)]"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-[var(--ink)] transition hover:bg-[rgba(var(--ink-rgb),0.06)]"
       >
         <StatusIcon status={status} size={12} />
         <span className="min-w-0 flex-1 truncate">{topic.name}</span>
         <span className="shrink-0 text-[10px] text-[var(--ink)]/60">{STATUS_LABEL[status]}</span>
       </button>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={() => onRemove(topic.id)}
+          disabled={removeDisabled}
+          aria-label={`Remove prerequisite ${topic.name}`}
+          title="Remove this prerequisite"
+          className="shrink-0 rounded-md p-1 text-[var(--ink)]/50 transition hover:bg-[rgba(var(--ink-rgb),0.08)] hover:text-[var(--status-missed)] disabled:opacity-40"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
     </li>
   );
 }
@@ -54,6 +86,9 @@ export default function TopicDetailPanel({
   totalBefore,
   totalAfter,
   isFocused,
+  candidates,
+  onAddPrerequisite,
+  onRemovePrerequisite,
   onClose,
   onSelectTopic,
   onFocus,
@@ -63,6 +98,33 @@ export default function TopicDetailPanel({
 }: Props) {
   const status = normalizeStatus(topic.status);
   const score = Math.max(0, Math.min(100, Math.round(topic.score)));
+
+  // Editing the topic's prerequisites. A failed change (a loop the picker couldn't
+  // foresee, a dropped connection) is shown here and nothing else on screen moves.
+  const [choice, setChoice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  useEffect(() => {
+    // Another topic was selected: its picker starts clean.
+    setChoice("");
+    setEditError(null);
+  }, [topic.id]);
+  useEffect(() => {
+    // The chosen topic stopped being a candidate (just added): clear the picker.
+    if (choice && !candidates.some((c) => String(c.id) === choice)) setChoice("");
+  }, [candidates, choice]);
+
+  async function change(action: () => Promise<void>, fallback: string) {
+    setBusy(true);
+    setEditError(null);
+    try {
+      await action();
+    } catch (err) {
+      setEditError(editErrorText(err, fallback));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <aside
@@ -110,11 +172,56 @@ export default function TopicDetailPanel({
         {prerequisites.length ? (
           <ul className="mt-1 -mx-1">
             {prerequisites.map((t) => (
-              <TopicLink key={t.id} topic={t} onSelect={onSelectTopic} />
+              <TopicLink
+                key={t.id}
+                topic={t}
+                onSelect={onSelectTopic}
+                removeDisabled={busy}
+                onRemove={(id) => change(() => onRemovePrerequisite(id), "Couldn't remove that prerequisite.")}
+              />
             ))}
           </ul>
         ) : (
           <p className="mt-1 text-xs text-[var(--ink)]/60">None — a good place to start.</p>
+        )}
+
+        {candidates.length > 0 ? (
+          <form
+            className="mt-2 flex items-center gap-1.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!choice) return;
+              change(() => onAddPrerequisite(Number(choice)), "Couldn't add that prerequisite.");
+            }}
+          >
+            <label className="sr-only" htmlFor={`add-prereq-${topic.id}`}>
+              Add a prerequisite
+            </label>
+            <select
+              id={`add-prereq-${topic.id}`}
+              value={choice}
+              onChange={(e) => setChoice(e.target.value)}
+              disabled={busy}
+              className="min-w-0 flex-1 rounded-md border border-[rgba(var(--ink-rgb),0.15)] bg-[var(--bg-linen)] px-2 py-1 text-xs text-[var(--ink)]"
+            >
+              <option value="">Add a prerequisite...</option>
+              {candidates.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {candidateLabel(c)}
+                </option>
+              ))}
+            </select>
+            <Button type="submit" size="sm" variant="outline" disabled={!choice || busy}>
+              Add
+            </Button>
+          </form>
+        ) : (
+          <p className="mt-2 text-[11px] text-[var(--ink)]/50">No other topics can be added here.</p>
+        )}
+        {editError && (
+          <p role="alert" className="mt-1.5 text-xs text-[var(--error-text)]">
+            {editError}
+          </p>
         )}
       </section>
 
