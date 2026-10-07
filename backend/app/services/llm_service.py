@@ -53,6 +53,11 @@ class LLMResult:
     # True when the reply stopped because it hit the output cap, not because
     # the model finished.
     hit_output_limit: bool = False
+    # True for a failure worth trying once more: Ollama itself returned a 5xx
+    # (it does so now and then, with no reason logged, and the same request
+    # usually works the second time). Not set for "not running", "model not
+    # pulled" or a timeout, where a retry would only double the wait.
+    retryable: bool = False
 
 
 class StreamAbort:
@@ -207,7 +212,7 @@ def generate(
 
     error = _status_error(response, model_name)
     if error:
-        return LLMResult(ok=False, error=error)
+        return LLMResult(ok=False, error=error, retryable=response.status_code >= 500)
 
     try:
         data = response.json()

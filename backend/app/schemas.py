@@ -187,6 +187,17 @@ class SessionOut(BaseModel):
     timestamp: datetime
 
 
+class SessionHistoryItem(BaseModel):
+    """One entry of the study-session timeline."""
+
+    id: int
+    topic_id: int
+    topic_name: str
+    type: SessionType
+    score_delta: int
+    timestamp: Optional[datetime] = None
+
+
 class SourceCitation(BaseModel):
     source: str
     page: Optional[int] = None
@@ -246,10 +257,44 @@ class QuizSetOut(BaseModel):
     attempt: Optional[QuizAttemptOut] = None
 
 
+class QuizJobOut(BaseModel):
+    """Progress of a background quiz generation. Carries no questions or answers:
+    the finished quiz is read the usual way, so nothing is ever sent ungraded
+    that wasn't before."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    topic_id: int
+    # queued | running | succeeded | partial | failed
+    status: str
+    requested: int
+    completed: int
+    error: Optional[str] = None
+    created_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+
+
 class QuizState(BaseModel):
+    # The latest quiz that can be taken (never one still being written).
     quiz_set: Optional[QuizSetOut] = None
     # Whether the topic has any study material to generate a quiz from.
     has_material: bool
+    # The topic's queued or running generation, if any, so a reload resumes its progress.
+    job: Optional[QuizJobOut] = None
+
+
+class QuizSummary(BaseModel):
+    """One past quiz in a topic's list: enough to pick one, no questions."""
+
+    id: int
+    created_at: Optional[datetime] = None
+    question_count: int
+    taken: bool
+    correct: Optional[int] = None
+    total: Optional[int] = None
+    score_percent: Optional[float] = None
+    attempted_at: Optional[datetime] = None
 
 
 class AskRequest(BaseModel):

@@ -1,19 +1,23 @@
-"""Quiz endpoints: reading, generating, grading, regeneration history, errors.
+"""Quiz endpoints: reading, background generation, grading, history, errors.
 
 The model is mocked (as in the tutor tests) and chunks are inserted directly,
-so none of this needs Ollama or the embedding model.
+so none of this needs Ollama or the embedding model. The generation worker is a
+thread in production; here it runs inline (see `inline_worker`), so a POST that
+starts a job has finished it by the time the test looks.
 """
 
 import json
+from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy import event, func
 from sqlalchemy.exc import IntegrityError
 
 from app import models
-from app.database import engine
+from app.config import QUIZ_QUESTION_COUNT
+from app.database import SessionLocal, engine
 from app.routers import quiz as quiz_router
-from app.services import llm_service, quiz_service
+from app.services import llm_service, quiz_jobs
 from helpers import make_topic
 
 
@@ -27,11 +31,19 @@ def make_q(n):
     }
 
 
-def good_reply(count=5):
-    return json.dumps({"questions": [make_q(n) for n in range(1, count + 1)]})
+def one(n):
+    """A model reply holding exactly one question, as each call now asks for."""
+    return json.dumps({"questions": [make_q(n)]})
+
+
+def replies(count):
+    return [one(n) for n in range(1, count + 1)]
 
 
 class FakeLLM:
+    """Replies in order; the last one repeats. A reply can also be a callable taking
+    the call number (run inside the worker, for mid-run assertions) or an LLMResult."""
+
     def __init__(self, *replies):
         self.replies = list(replies)
         self.calls = []
@@ -39,6 +51,8 @@ class FakeLLM:
     def __call__(self, system_prompt, user_prompt, model=None, **kwargs):
         self.calls.append({"system": system_prompt, "user": user_prompt, **kwargs})
         reply = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
+        if callable(reply):
+            reply = reply(len(self.calls))
         if isinstance(reply, llm_service.LLMResult):
             return reply
         return llm_service.LLMResult(ok=True, text=reply)
@@ -46,12 +60,17 @@ class FakeLLM:
 
 @pytest.fixture()
 def fake_llm(monkeypatch):
-    def install(*replies):
-        fake = FakeLLM(*replies)
+    def install(*reply_list):
+        fake = FakeLLM(*reply_list)
         monkeypatch.setattr(llm_service, "generate", fake)
         return fake
 
     return install
+
+
+@pytest.fixture(autouse=True)
+def inline_worker(monkeypatch):
+    monkeypatch.setattr(quiz_jobs, "spawn", lambda job_id: quiz_jobs.run_job(job_id))
 
 
 def add_material(db_session, topic_id):
@@ -89,6 +108,19 @@ def generate(client, topic_id, **params):
     return client.post(f"/quiz/{topic_id}/generate", params=params)
 
 
+def run(client, topic_id, **params):
+    """Start a job and return its final state (the worker ran inline)."""
+    started = generate(client, topic_id, **params)
+    assert started.status_code == 202, started.text
+    job = client.get(f"/quiz/jobs/{started.json()['id']}")
+    assert job.status_code == 200, job.text
+    return job.json()
+
+
+def current_set(client, topic_id):
+    return client.get(f"/quiz/{topic_id}").json()["quiz_set"]
+
+
 def keys_for(db_session, quiz_set_id):
     db_session.rollback()
     questions = (
@@ -110,160 +142,537 @@ def answers(keys, correct_ids=(), wrong_ids=()):
     return out
 
 
+def add_job(db_session, topic_id, status="running", heartbeat_age=0, **fields):
+    job = models.QuizJob(
+        topic_id=topic_id,
+        status=status,
+        requested=3,
+        completed=fields.pop("completed", 0),
+        heartbeat_at=datetime.utcnow() - timedelta(seconds=heartbeat_age),
+        **fields,
+    )
+    db_session.add(job)
+    db_session.commit()
+    return job
+
+
 # --- reading (never generates) ---------------------------------------------------------
 
 
 def test_get_without_a_set_returns_null_and_never_calls_the_model(client, topic, fake_llm):
-    llm = fake_llm(good_reply())
+    llm = fake_llm(one(1))
     resp = client.get(f"/quiz/{topic}")
     assert resp.status_code == 200
-    assert resp.json() == {"quiz_set": None, "has_material": True}
+    assert resp.json() == {"quiz_set": None, "has_material": True, "job": None}
     assert llm.calls == []
 
 
 def test_get_reports_when_there_is_no_material(client, fake_llm):
-    llm = fake_llm(good_reply())
+    llm = fake_llm(one(1))
     empty_topic = make_topic(client, "Empty", course="DSA")["id"]
-    assert client.get(f"/quiz/{empty_topic}").json() == {"quiz_set": None, "has_material": False}
+    assert client.get(f"/quiz/{empty_topic}").json() == {"quiz_set": None, "has_material": False, "job": None}
     assert llm.calls == []
 
 
-def test_get_never_creates_a_set_however_often_it_is_called(client, db_session, topic, fake_llm):
-    llm = fake_llm(good_reply())
+def test_get_never_creates_a_set_or_a_job_however_often_it_is_called(client, db_session, topic, fake_llm):
+    llm = fake_llm(one(1))
     for _ in range(3):
         client.get(f"/quiz/{topic}")
     assert llm.calls == []
-    assert count(db_session, models.QuizSet) == 0
+    assert count(db_session, models.QuizSet) == 0 and count(db_session, models.QuizJob) == 0
 
 
-# --- generating ----------------------------------------------------------------------------
+# --- generating: a background job, one question at a time ---------------------------------------
 
 
-def test_generate_creates_a_set_of_grounded_questions_without_the_answers(client, db_session, topic, fake_llm):
-    llm = fake_llm(good_reply(5))
+def test_generate_returns_a_job_at_once_with_the_default_of_three_questions(client, topic, fake_llm):
+    fake_llm(*replies(3))
     resp = generate(client, topic)
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 202
     body = resp.json()
-    assert len(body["questions"]) == 5
-    assert body["attempt"] is None
-    for position, question in enumerate(body["questions"]):
-        assert question["position"] == position
-        assert sorted(question["options"]) == ["A", "B", "C", "D"]
-        assert set(question) == {"id", "position", "question_text", "options"}
-    # Neither the keys nor the explanations leave the server before grading.
-    assert "correct_option" not in resp.text
-    assert "Explanation of fact" not in resp.text
+    assert body["status"] == "queued" and body["requested"] == QUIZ_QUESTION_COUNT == 3
+    assert body["completed"] == 0 and body["topic_id"] == topic
+    assert set(body) == {
+        "id", "topic_id", "status", "requested", "completed", "error",
+        "created_at", "started_at", "finished_at",
+    }
 
-    call = llm.calls[0]
-    assert call["json_mode"] is True
-    assert "Notes A, p. 3" in call["user"] and "Notes B" in call["user"]
-    assert count(db_session, models.QuizSet) == 1
+
+def test_the_worker_writes_one_question_per_model_call(client, db_session, topic, fake_llm):
+    llm = fake_llm(*replies(3))
+    job = run(client, topic)
+
+    assert (job["status"], job["completed"], job["requested"], job["error"]) == ("succeeded", 3, 3, None)
+    assert job["started_at"] and job["finished_at"]
+    assert len(llm.calls) == 3
+    for call in llm.calls:
+        assert call["json_mode"] is True
+        assert "Write 1 multiple-choice question." in call["user"]
+        assert call["max_output_tokens"] < 500  # room for one question, not a whole quiz
+
+    quiz_set = current_set(client, topic)
+    assert [q["question_text"] for q in quiz_set["questions"]] == [make_q(n)["question"] for n in (1, 2, 3)]
+    assert [q["position"] for q in quiz_set["questions"]] == [0, 1, 2]
+    assert quiz_set["attempt"] is None
+
+
+def test_neither_the_job_nor_the_quiz_leaks_answers_before_grading(client, topic, fake_llm):
+    fake_llm(*replies(3))
+    started = generate(client, topic)
+    job = client.get(f"/quiz/jobs/{started.json()['id']}")
+    state = client.get(f"/quiz/{topic}")
+    for resp in (started, job, state):
+        assert "correct_option" not in resp.text
+        assert "Explanation of fact" not in resp.text
+    for question in state.json()["quiz_set"]["questions"]:
+        assert set(question) == {"id", "position", "question_text", "options"}
+
+
+def test_each_question_after_the_first_is_told_what_was_already_written(client, topic, fake_llm):
+    llm = fake_llm(*replies(3))
+    run(client, topic)
+    assert "already written" not in llm.calls[0]["user"]
+    assert make_q(1)["question"] in llm.calls[1]["user"]
+    assert make_q(1)["question"] in llm.calls[2]["user"] and make_q(2)["question"] in llm.calls[2]["user"]
+
+
+def test_progress_is_stored_as_each_question_lands(client, db_session, topic, fake_llm):
+    """A poll in the middle of a run sees the questions written so far."""
+    seen = {}
+
+    def peek(call_number):
+        other = SessionLocal()
+        try:
+            job = other.query(models.QuizJob).one()
+            seen[call_number] = (job.status, job.completed, job.heartbeat_at is not None)
+            quiz_set = other.get(models.QuizSet, job.quiz_set_id)
+            seen[f"set{call_number}"] = (quiz_set.status, len(quiz_set.questions))
+        finally:
+            other.close()
+        return one(call_number)
+
+    fake_llm(peek, peek, peek)
+    run(client, topic)
+    assert seen[1] == ("running", 0, True) and seen[2] == ("running", 1, True) and seen[3] == ("running", 2, True)
+    # The set exists from the start, hidden as "generating", and grows one question at a time.
+    assert seen["set1"] == ("generating", 0) and seen["set3"] == ("generating", 2)
+
+
+def test_a_set_still_being_written_is_invisible_everywhere(client, db_session, topic, fake_llm):
+    state = {}
+
+    def look(call_number):
+        state["latest"] = client.get(f"/quiz/{topic}").json()
+        state["history"] = client.get(f"/quiz/{topic}/history").json()
+        db_session.rollback()
+        set_id = db_session.query(models.QuizSet.id).scalar()
+        state["open"] = client.get(f"/quiz/sets/{set_id}").status_code
+        state["grade"] = client.post(
+            "/quiz/submit", json={"quiz_set_id": set_id, "answers": [{"question_id": 1, "selected_option": "A"}]}
+        ).status_code
+        return one(call_number)
+
+    fake_llm(look, one(2), one(3))
+    run(client, topic)
+    assert state["latest"]["quiz_set"] is None
+    assert state["latest"]["job"]["status"] == "running"
+    assert state["history"] == [] and state["open"] == 404 and state["grade"] == 404
+    assert current_set(client, topic) is not None  # and visible once finished
+
+
+def test_the_finished_set_is_ready_and_a_reload_finds_no_active_job(client, db_session, topic, fake_llm):
+    fake_llm(*replies(3))
+    run(client, topic)
+    state = client.get(f"/quiz/{topic}").json()
+    assert state["job"] is None and len(state["quiz_set"]["questions"]) == 3
+    db_session.rollback()
+    assert db_session.query(models.QuizSet).one().status == "ready"
 
 
 def test_generated_questions_keep_citations_built_from_the_excerpts(client, db_session, topic, fake_llm):
-    fake_llm(good_reply(5))
-    quiz_set_id = generate(client, topic).json()["id"]
+    fake_llm(*replies(3))
+    run(client, topic)
     db_session.rollback()
-    questions = (
-        db_session.query(models.QuizQuestion)
-        .filter(models.QuizQuestion.quiz_set_id == quiz_set_id)
-        .order_by(models.QuizQuestion.position)
-        .all()
-    )
-    assert questions[0].sources == [{"source": "Notes A", "page": 3}]
+    questions = db_session.query(models.QuizQuestion).order_by(models.QuizQuestion.position).all()
+    assert questions[0].sources == [{"source": "Notes A", "page": 3}]  # cited only excerpt 1
     assert questions[1].sources == [{"source": "Notes A", "page": 3}, {"source": "Notes B", "page": None}]
     assert all(q.explanation for q in questions)
 
 
-def test_get_returns_the_latest_set_after_generation(client, topic, fake_llm):
-    fake_llm(good_reply())
-    created = generate(client, topic).json()
-    state = client.get(f"/quiz/{topic}").json()
-    assert state["has_material"] is True
-    assert state["quiz_set"]["id"] == created["id"]
-    assert [q["id"] for q in state["quiz_set"]["questions"]] == [q["id"] for q in created["questions"]]
-    assert state["quiz_set"]["attempt"] is None
+def test_excerpts_are_a_few_per_question_with_titles_and_pages(client, topic, fake_llm):
+    llm = fake_llm(*replies(3))
+    run(client, topic)
+    assert "Notes A, p. 3" in llm.calls[0]["user"] and "Notes B" in llm.calls[0]["user"]
 
 
-def test_count_controls_the_number_of_questions_and_is_validated(client, topic, fake_llm):
-    llm = fake_llm(good_reply(10))
-    assert len(generate(client, topic, count=3).json()["questions"]) == 3
-    assert "Write 3 multiple-choice questions" in llm.calls[0]["user"]
-    assert len(generate(client, topic, count=10).json()["questions"]) == 10
-    assert generate(client, topic, count=2).status_code == 422
-    assert generate(client, topic, count=11).status_code == 422
-    assert len(generate(client, topic).json()["questions"]) == 5  # the default
+@pytest.mark.parametrize("count_param,expected", [(1, 1), (3, 3), (10, 10)])
+def test_count_sets_how_many_questions_are_requested(client, topic, fake_llm, count_param, expected):
+    llm = fake_llm(*replies(10))
+    job = run(client, topic, count=count_param)
+    assert job["requested"] == expected and job["completed"] == expected
+    assert len(llm.calls) == expected
+
+
+@pytest.mark.parametrize("bad", [0, -1, 11])
+def test_count_outside_one_to_ten_is_rejected(client, topic, fake_llm, bad, db_session):
+    llm = fake_llm(one(1))
+    assert generate(client, topic, count=bad).status_code == 422
+    assert llm.calls == [] and count(db_session, models.QuizJob) == 0
 
 
 def test_no_material_is_a_409_and_the_model_is_never_called(client, db_session, fake_llm):
-    llm = fake_llm(good_reply())
+    llm = fake_llm(one(1))
     empty_topic = make_topic(client, "Empty", course="DSA")["id"]
     resp = generate(client, empty_topic)
     assert resp.status_code == 409
     assert "Add study material first" in resp.json()["detail"]
     assert llm.calls == []
-    assert count(db_session, models.QuizSet) == 0
+    assert count(db_session, models.QuizSet) == 0 and count(db_session, models.QuizJob) == 0
 
 
-def test_malformed_json_then_a_good_retry_succeeds(client, topic, fake_llm):
-    llm = fake_llm("{this is not json", good_reply(4))
-    resp = generate(client, topic)
-    assert resp.status_code == 200
-    assert len(resp.json()["questions"]) == 4
-    assert len(llm.calls) == 2
+# --- when the model misbehaves ---------------------------------------------------------------
 
 
-def test_partially_invalid_output_keeps_only_the_valid_questions(client, topic, fake_llm):
-    items = [make_q(1), {**make_q(2), "answer": "Z"}, make_q(3), {**make_q(4), "sources": [9]}, make_q(5)]
-    fake_llm(json.dumps({"questions": items}))
-    resp = generate(client, topic)
-    assert resp.status_code == 200
-    assert [q["question_text"] for q in resp.json()["questions"]] == [
+def test_malformed_json_is_retried_within_the_same_question(client, topic, fake_llm):
+    llm = fake_llm("{this is not json", one(1), one(2), one(3))
+    job = run(client, topic)
+    assert job["status"] == "succeeded" and job["completed"] == 3
+    assert len(llm.calls) == 4
+
+
+def test_a_question_the_model_cannot_get_right_is_skipped_and_the_next_gets_a_fresh_try(client, topic, fake_llm):
+    bad = json.dumps({"questions": [{**make_q(9), "answer": "Z"}]})
+    llm = fake_llm(one(1), bad, bad, one(3), one(4))
+    job = run(client, topic)
+    # Slot 2 failed both attempts; slot 3 worked: two questions, reported as partial.
+    assert job["status"] == "partial" and job["completed"] == 2 and job["requested"] == 3
+    assert "usable question for 1 of the 3" in job["error"]
+    assert len(llm.calls) == 4
+    assert [q["question_text"] for q in current_set(client, topic)["questions"]] == [
         make_q(1)["question"],
         make_q(3)["question"],
-        make_q(5)["question"],
     ]
 
 
-def test_all_invalid_output_is_a_503_and_nothing_is_stored(client, db_session, topic, fake_llm):
-    llm = fake_llm("garbage", json.dumps({"questions": [{**make_q(1), "answer": "Z"}]}))
-    resp = generate(client, topic)
-    assert resp.status_code == 503
-    assert "usable questions" in resp.json()["detail"]
-    assert len(llm.calls) == 2  # exactly one retry
-    assert count(db_session, models.QuizSet) == 0
-    assert count(db_session, models.QuizQuestion) == 0
+def test_a_repeat_of_an_earlier_question_is_not_stored_twice(client, db_session, topic, fake_llm):
+    fake_llm(one(1), one(1), one(1), one(2), one(3))  # slot 2: the model only repeats itself, twice
+    job = run(client, topic)
+    assert job["completed"] == 2
+    db_session.rollback()
+    texts = [q.question_text for q in db_session.query(models.QuizQuestion).all()]
+    assert len(texts) == len(set(texts))
 
 
-def test_too_few_valid_questions_is_a_503(client, db_session, topic, fake_llm):
-    fake_llm(json.dumps({"questions": [make_q(1), make_q(2)]}))  # 2 valid, both tries
-    assert generate(client, topic).status_code == 503
-    assert count(db_session, models.QuizSet) == 0
+def test_all_unusable_output_fails_the_job_and_stores_nothing(client, db_session, topic, fake_llm):
+    llm = fake_llm("garbage")
+    job = run(client, topic)
+    assert job["status"] == "failed" and job["completed"] == 0
+    assert "usable question" in job["error"]
+    assert len(llm.calls) == 6  # three questions, two attempts each
+    assert count(db_session, models.QuizSet) == 0 and count(db_session, models.QuizQuestion) == 0
+    assert current_set(client, topic) is None
 
 
-def test_ollama_down_is_a_503_with_a_clear_message_and_no_retry(client, db_session, topic, fake_llm):
+def test_ollama_down_fails_at_once_without_retries_or_leftovers(client, db_session, topic, fake_llm):
     llm = fake_llm(llm_service.LLMResult(ok=False, error="Ollama is not running or unreachable."))
-    resp = generate(client, topic)
-    assert resp.status_code == 503
-    assert "Ollama is not running" in resp.json()["detail"]
+    job = run(client, topic)
+    assert job["status"] == "failed" and "Ollama is not running" in job["error"]
     assert len(llm.calls) == 1
     assert count(db_session, models.QuizSet) == 0
+    assert job["finished_at"] is not None
 
 
-def test_a_second_generation_for_the_same_topic_in_flight_is_a_409(client, topic, fake_llm):
-    llm = fake_llm(good_reply())
-    with quiz_service.generation_slot(topic):
-        resp = generate(client, topic)
+def test_a_hiccup_inside_ollama_is_retried_and_the_quiz_still_completes(client, topic, fake_llm):
+    hiccup = llm_service.LLMResult(ok=False, error="Ollama returned HTTP 500.", retryable=True)
+    llm = fake_llm(one(1), hiccup, one(2), one(3))
+    job = run(client, topic)
+    assert job["status"] == "succeeded" and job["completed"] == 3
+    assert len(llm.calls) == 4
+
+
+def test_a_failure_after_some_questions_keeps_them_as_a_partial_quiz(client, db_session, topic, fake_llm):
+    llm = fake_llm(one(1), one(2), llm_service.LLMResult(ok=False, error="The local model timed out."))
+    job = run(client, topic)
+
+    assert job["status"] == "partial" and job["completed"] == 2 and job["requested"] == 3
+    assert "timed out" in job["error"]
+    assert len(llm.calls) == 3
+    quiz_set = current_set(client, topic)
+    assert len(quiz_set["questions"]) == 2  # what was written survived the failure
+    # ...and it is a real quiz: it can be graded.
+    keys = keys_for(db_session, quiz_set["id"])
+    graded = client.post(
+        "/quiz/submit",
+        json={"quiz_set_id": quiz_set["id"], "answers": answers(keys, correct_ids=list(keys))},
+    )
+    assert graded.status_code == 200 and graded.json()["total"] == 2
+
+
+def test_the_worker_never_raises_and_always_closes_the_job(client, topic, fake_llm, monkeypatch):
+    fake_llm(*replies(3))
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(quiz_jobs, "select_excerpts", boom)
+    job = run(client, topic)
+    assert job["status"] == "failed"
+    assert "kaboom" not in json.dumps(job)  # no internals leak to the page
+    assert job["error"] == quiz_jobs.UNEXPECTED_MESSAGE
+    assert client.get(f"/quiz/{topic}").json()["job"] is None  # nothing left "running"
+
+
+def test_a_worker_that_cannot_start_closes_the_job_instead_of_leaving_it_queued(client, topic, monkeypatch):
+    def no_threads(job_id):
+        raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(quiz_jobs, "spawn", no_threads)
+    started = generate(client, topic)
+    assert started.status_code == 202
+    job = client.get(f"/quiz/jobs/{started.json()['id']}").json()
+    assert job["status"] == "failed" and job["error"] == quiz_jobs.UNEXPECTED_MESSAGE
+    assert generate(client, topic).status_code == 202  # the topic is not stuck
+
+
+def test_in_production_the_worker_runs_on_its_own_thread(monkeypatch):
+    import threading
+
+    ran = {}
+    done = threading.Event()
+
+    def fake_run(job_id):
+        ran["job"], ran["thread"] = job_id, threading.current_thread()
+        done.set()
+
+    monkeypatch.setattr(quiz_jobs, "run_job", fake_run)
+    quiz_jobs._threaded(42)
+    assert done.wait(timeout=5)
+    assert ran["job"] == 42
+    assert ran["thread"] is not threading.main_thread() and ran["thread"].daemon
+
+
+# --- one active job per topic, enforced by the database ---------------------------------------------
+
+
+def test_a_second_generation_while_one_is_active_is_a_409(client, db_session, topic, fake_llm):
+    llm = fake_llm(*replies(3))
+    add_job(db_session, topic, status="running")
+    resp = generate(client, topic)
     assert resp.status_code == 409
     assert "already in progress" in resp.json()["detail"]
     assert llm.calls == []
-    assert generate(client, topic).status_code == 200  # the slot was released
+    assert count(db_session, models.QuizJob) == 1
 
 
-def test_the_slot_is_released_after_a_failed_generation(client, topic, fake_llm):
-    fake_llm(llm_service.LLMResult(ok=False, error="down"), good_reply())
-    assert generate(client, topic).status_code == 503
-    assert generate(client, topic).status_code == 200
+def test_a_queued_job_blocks_too(client, db_session, topic, fake_llm):
+    fake_llm(*replies(3))
+    add_job(db_session, topic, status="queued")
+    assert generate(client, topic).status_code == 409
+
+
+def test_the_guard_is_a_database_constraint_not_application_state(db_session, topic):
+    add_job(db_session, topic, status="running")
+    db_session.add(models.QuizJob(topic_id=topic, status="queued", requested=3))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+    assert count(db_session, models.QuizJob) == 1
+
+
+def test_a_request_that_loses_the_race_for_the_slot_is_a_409(client, db_session, topic, fake_llm, monkeypatch):
+    """Both requests pass any check; only one insert can succeed."""
+    fake_llm(*replies(3))
+    add_job(db_session, topic, status="running")
+    monkeypatch.setattr(quiz_jobs, "fail_stale_jobs", lambda *a, **k: 0)
+    monkeypatch.setattr(quiz_jobs, "active_job", lambda *a, **k: None)  # nothing visible to a pre-check
+    assert generate(client, topic).status_code == 409
+    assert count(db_session, models.QuizJob) == 1
+
+
+def test_finished_jobs_do_not_block_and_other_topics_are_independent(client, db_session, topic, fake_llm):
+    fake_llm(*replies(10))
+    other = make_topic(client, "Other", course="DSA")["id"]
+    add_material(db_session, other)
+    add_job(db_session, topic, status="running")
+    assert run(client, other)["status"] == "succeeded"  # a different topic is unaffected
+
+    db_session.query(models.QuizJob).filter(models.QuizJob.topic_id == topic).update({"status": "failed"})
+    db_session.commit()
+    assert run(client, topic)["status"] == "succeeded"
+    assert run(client, topic)["status"] == "succeeded"  # and again: nothing active remains
+
+
+def test_a_get_reports_the_active_job_so_a_reload_can_resume_its_progress(client, db_session, topic):
+    job = add_job(db_session, topic, status="running", completed=1)
+    state = client.get(f"/quiz/{topic}").json()
+    assert state["job"]["id"] == job.id
+    assert (state["job"]["status"], state["job"]["completed"], state["job"]["requested"]) == ("running", 1, 3)
+
+
+# --- dead workers ---------------------------------------------------------------------------------------
+
+
+def test_a_job_that_stopped_reporting_is_closed_and_no_longer_blocks(client, db_session, topic, fake_llm):
+    fake_llm(*replies(3))
+    stale = add_job(db_session, topic, status="running", heartbeat_age=quiz_jobs.QUIZ_JOB_STALE_SECONDS + 60)
+    job = run(client, topic)  # starting a new one first closes the dead one
+    assert job["status"] == "succeeded"
+    db_session.rollback()
+    old = db_session.get(models.QuizJob, stale.id)
+    assert old.status == "failed" and old.error == quiz_jobs.STALLED_MESSAGE
+
+
+def test_a_job_with_a_recent_heartbeat_is_left_alone(client, db_session, topic, fake_llm):
+    fake_llm(*replies(3))
+    add_job(db_session, topic, status="running", heartbeat_age=quiz_jobs.QUIZ_JOB_STALE_SECONDS - 120)
+    assert generate(client, topic).status_code == 409
+
+
+def test_polling_a_dead_job_reports_it_failed_not_running_forever(client, db_session, topic):
+    stale = add_job(db_session, topic, status="running", heartbeat_age=quiz_jobs.QUIZ_JOB_STALE_SECONDS + 60)
+    polled = client.get(f"/quiz/jobs/{stale.id}").json()
+    assert polled["status"] == "failed" and polled["error"] == quiz_jobs.STALLED_MESSAGE
+
+
+def test_a_restart_closes_every_active_job_but_keeps_the_questions_already_written(client, db_session, topic):
+    quiz_set = models.QuizSet(topic_id=topic, status="generating")
+    quiz_set.questions.append(
+        models.QuizQuestion(position=0, question_text="written before the crash", options={"A": "a"}, correct_option="A")
+    )
+    db_session.add(quiz_set)
+    db_session.commit()
+    add_job(db_session, topic, status="running", completed=1, quiz_set_id=quiz_set.id)
+
+    empty_topic = make_topic(client, "Empty run", course="DSA")["id"]
+    empty_set = models.QuizSet(topic_id=empty_topic, status="generating")
+    db_session.add(empty_set)
+    db_session.commit()
+    add_job(db_session, empty_topic, status="queued", quiz_set_id=empty_set.id)
+    kept_set_id, empty_set_id = quiz_set.id, empty_set.id
+
+    db = SessionLocal()
+    try:
+        assert quiz_jobs.interrupt_active_jobs(db) == 2
+    finally:
+        db.close()
+
+    db_session.expire_all()
+    kept, lost = db_session.query(models.QuizJob).order_by(models.QuizJob.id).all()
+    assert kept.status == "partial" and kept.completed == 1 and kept.error == quiz_jobs.RESTART_MESSAGE
+    assert lost.status == "failed" and lost.quiz_set_id is None
+    assert db_session.get(models.QuizSet, kept_set_id).status == "ready"
+    assert db_session.get(models.QuizSet, empty_set_id) is None  # an empty set is not left behind
+    assert current_set(client, topic)["questions"][0]["question_text"] == "written before the crash"
+
+
+def test_starting_the_server_closes_jobs_left_running(db_session, topic, caplog):
+    import logging
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    add_job(db_session, topic, status="running")
+    with caplog.at_level(logging.WARNING, logger="uvicorn.error"):
+        with TestClient(app):  # entering the context runs the startup hook
+            pass
+    db_session.expire_all()
+    assert db_session.query(models.QuizJob).one().status == "failed"
+    assert "quiz generation job" in caplog.text
+
+
+# --- topics going away mid-run -------------------------------------------------------------------------------
+
+
+def test_deleting_the_topic_while_a_quiz_is_being_written_leaves_nothing_behind(client, db_session, topic, fake_llm):
+    def delete_topic(call_number):
+        other = SessionLocal()
+        try:
+            other.delete(other.get(models.Topic, topic))
+            other.commit()
+        finally:
+            other.close()
+        return one(call_number)
+
+    llm = fake_llm(delete_topic, one(2), one(3))
+    generate(client, topic)
+    assert len(llm.calls) == 1  # the worker noticed and stopped writing
+    for model in (models.QuizQuestion, models.QuizSet, models.QuizJob):
+        assert count(db_session, model) == 0
+
+
+# --- history and past quizzes -------------------------------------------------------------------------------------
+
+
+def test_history_lists_past_quizzes_newest_first_with_their_results(client, db_session, topic, fake_llm):
+    fake_llm(*replies(10))
+    run(client, topic, count=2)
+    first = current_set(client, topic)
+    keys = keys_for(db_session, first["id"])
+    client.post(
+        "/quiz/submit",
+        json={"quiz_set_id": first["id"], "answers": answers(keys, correct_ids=list(keys)[:1], wrong_ids=list(keys)[1:])},
+    )
+    run(client, topic, count=3)
+    second = current_set(client, topic)
+
+    history = client.get(f"/quiz/{topic}/history").json()
+    assert [h["id"] for h in history] == [second["id"], first["id"]]
+    newest, oldest = history
+    assert (newest["question_count"], newest["taken"], newest["correct"], newest["score_percent"]) == (3, False, None, None)
+    assert newest["attempted_at"] is None and newest["created_at"]
+    assert (oldest["question_count"], oldest["taken"], oldest["correct"], oldest["total"]) == (2, True, 1, 2)
+    assert oldest["score_percent"] == 50.0 and oldest["attempted_at"]
+
+
+def test_history_has_no_questions_or_answers(client, topic, fake_llm):
+    fake_llm(*replies(3))
+    run(client, topic)
+    resp = client.get(f"/quiz/{topic}/history")
+    for secret in ("question_text", "options", "correct_option", "Explanation of fact", "Alpha"):
+        assert secret not in resp.text
+
+
+def test_history_limit(client, topic, fake_llm):
+    fake_llm(*replies(10))
+    for _ in range(3):
+        run(client, topic, count=1)
+    assert len(client.get(f"/quiz/{topic}/history", params={"limit": 2}).json()) == 2
+    assert client.get(f"/quiz/{topic}/history", params={"limit": 0}).status_code == 422
+
+
+def test_a_past_untaken_quiz_can_be_opened_and_still_hides_its_answers(client, topic, fake_llm):
+    fake_llm(*replies(10))
+    run(client, topic, count=2)
+    old = current_set(client, topic)
+    run(client, topic, count=2)
+
+    opened = client.get(f"/quiz/sets/{old['id']}")
+    assert opened.status_code == 200
+    assert opened.json()["attempt"] is None and len(opened.json()["questions"]) == 2
+    assert "correct_option" not in opened.text and "Explanation of fact" not in opened.text
+
+
+def test_a_past_taken_quiz_shows_its_results(client, db_session, topic, fake_llm):
+    fake_llm(*replies(10))
+    run(client, topic, count=2)
+    old = current_set(client, topic)
+    keys = keys_for(db_session, old["id"])
+    client.post("/quiz/submit", json={"quiz_set_id": old["id"], "answers": answers(keys, correct_ids=list(keys))})
+    run(client, topic, count=2)  # the old quiz is no longer the latest
+
+    opened = client.get(f"/quiz/sets/{old['id']}").json()
+    assert opened["attempt"]["correct"] == 2 and opened["attempt"]["results"][0]["explanation"]
+
+
+def test_a_past_untaken_quiz_can_still_be_taken(client, db_session, topic, fake_llm):
+    fake_llm(*replies(10))
+    run(client, topic, count=2)
+    old = current_set(client, topic)
+    run(client, topic, count=2)
+    keys = keys_for(db_session, old["id"])
+    graded = client.post("/quiz/submit", json={"quiz_set_id": old["id"], "answers": answers(keys, correct_ids=list(keys))})
+    assert graded.status_code == 200
 
 
 # --- grading ---------------------------------------------------------------------------------------
@@ -271,8 +680,9 @@ def test_the_slot_is_released_after_a_failed_generation(client, topic, fake_llm)
 
 @pytest.fixture()
 def quiz(client, db_session, topic, fake_llm):
-    fake_llm(good_reply(5))
-    created = generate(client, topic).json()
+    fake_llm(*replies(5))
+    run(client, topic, count=5)
+    created = current_set(client, topic)
     return {
         "topic": topic,
         "set": created["id"],
@@ -438,7 +848,7 @@ def test_resubmitting_an_attempted_set_is_a_409_and_changes_nothing(client, db_s
 
 
 def test_generation_does_not_load_chunk_embeddings(client, topic, fake_llm):
-    fake_llm(good_reply())
+    fake_llm(*replies(3))
     statements = []
 
     def record(conn, cursor, statement, parameters, context, executemany):
@@ -446,13 +856,14 @@ def test_generation_does_not_load_chunk_embeddings(client, topic, fake_llm):
 
     event.listen(engine, "before_cursor_execute", record)
     try:
-        assert generate(client, topic).status_code == 200
+        assert run(client, topic)["status"] == "succeeded"
     finally:
         event.remove(engine, "before_cursor_execute", record)
 
     chunk_selects = [s for s in statements if "FROM chunks" in s and s.lstrip().startswith("SELECT")]
     assert chunk_selects
-    assert not any("chunks.embedding" in s for s in chunk_selects)
+    offenders = [s for s in chunk_selects if "chunks.embedding" in s]
+    assert not offenders, offenders[0][:300]
 
 
 # --- regeneration keeps history --------------------------------------------------------------------
@@ -462,16 +873,16 @@ def test_regenerating_adds_a_new_set_and_keeps_old_sets_and_attempts(client, db_
     submit(client, quiz, answers(quiz["keys"], correct_ids=quiz["ids"]))
     old_questions = count(db_session, models.QuizQuestion)
 
-    fake_llm(good_reply(5))
-    new = generate(client, topic).json()
+    fake_llm(*replies(3))
+    run(client, topic, count=3)
+    new = current_set(client, topic)
     assert new["id"] != quiz["set"]
     assert new["attempt"] is None
 
     assert count(db_session, models.QuizSet) == 2
     assert count(db_session, models.QuizAttempt) == 1  # the earlier attempt survives
-    assert count(db_session, models.QuizQuestion) == old_questions + 5
-    latest = client.get(f"/quiz/{topic}").json()["quiz_set"]
-    assert latest["id"] == new["id"] and latest["attempt"] is None
+    assert count(db_session, models.QuizQuestion) == old_questions + 3
+    assert count(db_session, models.QuizJob) == 2
 
     # The new set can be graded in its own right.
     new_keys = keys_for(db_session, new["id"])
@@ -486,16 +897,27 @@ def test_regenerating_adds_a_new_set_and_keeps_old_sets_and_attempts(client, db_
 # --- cross-user ----------------------------------------------------------------------------------------
 
 
-def test_other_users_cannot_read_generate_or_grade_my_quiz(client, other_client, quiz, fake_llm):
-    llm = fake_llm(good_reply())
+def test_other_users_cannot_read_generate_or_grade_my_quiz(client, other_client, db_session, quiz, fake_llm):
+    llm = fake_llm(one(1))
+    jobs_before = count(db_session, models.QuizJob)
     assert other_client.get(f"/quiz/{quiz['topic']}").status_code == 404
     assert other_client.post(f"/quiz/{quiz['topic']}/generate").status_code == 404
+    assert other_client.get(f"/quiz/{quiz['topic']}/history").status_code == 404
+    assert other_client.get(f"/quiz/sets/{quiz['set']}").status_code == 404
     resp = other_client.post(
         "/quiz/submit",
         json={"quiz_set_id": quiz["set"], "answers": answers(quiz["keys"], correct_ids=quiz["ids"])},
     )
     assert resp.status_code == 404
     assert llm.calls == []
+    assert count(db_session, models.QuizJob) == jobs_before
+
+
+def test_other_users_cannot_see_my_job(client, other_client, topic, fake_llm):
+    fake_llm(*replies(3))
+    job = run(client, topic)
+    assert other_client.get(f"/quiz/jobs/{job['id']}").status_code == 404
+    assert other_client.get("/quiz/jobs/999999").status_code == 404
 
 
 def test_someone_elses_question_ids_against_my_own_set_get_a_400_that_leaks_nothing(
@@ -535,8 +957,9 @@ def test_someone_elses_question_ids_against_my_own_set_get_a_400_that_leaks_noth
 
 
 def test_questions_of_one_set_cannot_be_submitted_against_another_of_my_sets(client, db_session, topic, fake_llm, quiz):
-    fake_llm(good_reply(5))
-    other_set = generate(client, topic).json()
+    fake_llm(*replies(3))
+    run(client, topic, count=3)
+    other_set = current_set(client, topic)
     resp = client.post(
         "/quiz/submit",
         json={
@@ -546,3 +969,28 @@ def test_questions_of_one_set_cannot_be_submitted_against_another_of_my_sets(cli
     )
     assert resp.status_code == 400
     assert count(db_session, models.QuizAttempt) == 0
+
+
+# --- a worker closed from outside stops writing ---------------------------------------------------------
+
+
+def test_a_job_closed_by_a_sweep_mid_run_stops_the_worker_and_keeps_what_was_written(
+    client, db_session, topic, fake_llm
+):
+    def sweep_during_second_call(call_number):
+        db = SessionLocal()
+        try:
+            quiz_jobs.interrupt_active_jobs(db)  # e.g. another process judged this worker dead
+        finally:
+            db.close()
+        return one(call_number)
+
+    llm = fake_llm(one(1), sweep_during_second_call, one(3))
+    generate(client, topic)
+    assert len(llm.calls) == 2  # no third call, and the second question wasn't stored
+
+    db_session.expire_all()
+    job = db_session.query(models.QuizJob).one()
+    assert job.status == "partial" and job.completed == 1 and job.error == quiz_jobs.RESTART_MESSAGE
+    assert len(current_set(client, topic)["questions"]) == 1
+    assert count(db_session, models.QuizQuestion) == 1

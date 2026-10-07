@@ -51,9 +51,18 @@ UPLOAD_MAX_BYTES = int(float(os.getenv("MAX_UPLOAD_MB", "20")) * 1024 * 1024)
 # roughly 1,100-1,400 tokens, i.e. 220-280 s on a warm model and more on a
 # cold one, so 240 s timed out; 600 s leaves room. The excerpt limits keep
 # the prompt within a small model's context.
-QUIZ_QUESTION_COUNT = int(os.getenv("QUIZ_QUESTION_COUNT", "5"))
-QUIZ_MIN_VALID_QUESTIONS = int(os.getenv("QUIZ_MIN_VALID_QUESTIONS", "3"))
-QUIZ_MAX_EXCERPTS = int(os.getenv("QUIZ_MAX_EXCERPTS", "8"))
+#
+# Quizzes are written one question per model call, in a background job. Three
+# questions by default: at ~4 tokens/s each call is about two minutes.
+QUIZ_QUESTION_COUNT = int(os.getenv("QUIZ_QUESTION_COUNT", "3"))
+# Excerpts of the material given to the model for each question. Each one costs
+# prompt-reading time (~18 tokens/s on a CPU), so few, chosen differently for each
+# question, rather than all of the material every time.
+QUIZ_MAX_EXCERPTS = int(os.getenv("QUIZ_MAX_EXCERPTS", "3"))
+# A running quiz job that hasn't reported progress for this long is treated as
+# dead (its worker crashed) and no longer blocks the topic. Longer than two model
+# timeouts, the most one question can take.
+QUIZ_JOB_STALE_SECONDS = float(os.getenv("QUIZ_JOB_STALE_SECONDS", "1500"))
 QUIZ_CONTEXT_CHAR_BUDGET = int(os.getenv("QUIZ_CONTEXT_CHAR_BUDGET", "9000"))
 QUIZ_LLM_TIMEOUT_SECONDS = float(os.getenv("QUIZ_LLM_TIMEOUT_SECONDS", "600"))
 # Quiz sampling is a little warmer than the tutor's so regenerating a quiz

@@ -68,9 +68,28 @@ def get_owned_quiz_set(db: Session, quiz_set_id: int, user: models.User) -> mode
         .join(models.Topic, models.QuizSet.topic_id == models.Topic.id)
         .join(models.Module, models.Topic.module_id == models.Module.id)
         .join(models.Course, models.Module.course_id == models.Course.id)
-        .filter(models.QuizSet.id == quiz_set_id, models.Course.user_id == user.id)
+        .filter(
+            models.QuizSet.id == quiz_set_id,
+            models.Course.user_id == user.id,
+            # A set still being written isn't a quiz yet: nobody can open or grade it.
+            models.QuizSet.status == "ready",
+        )
         .first()
     )
     if quiz_set is None:
         raise HTTPException(status_code=404, detail="Quiz not found")
     return quiz_set
+
+
+def get_owned_quiz_job(db: Session, job_id: int, user: models.User) -> models.QuizJob:
+    job = (
+        db.query(models.QuizJob)
+        .join(models.Topic, models.QuizJob.topic_id == models.Topic.id)
+        .join(models.Module, models.Topic.module_id == models.Module.id)
+        .join(models.Course, models.Module.course_id == models.Course.id)
+        .filter(models.QuizJob.id == job_id, models.Course.user_id == user.id)
+        .first()
+    )
+    if job is None:
+        raise HTTPException(status_code=404, detail="Quiz job not found")
+    return job

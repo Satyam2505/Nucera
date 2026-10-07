@@ -155,6 +155,20 @@ def test_failures_come_back_as_results_not_exceptions(post, response, expected):
     assert result.ok is False and expected in result.error
 
 
+@pytest.mark.parametrize("status,retryable", [(500, True), (502, True), (503, True), (404, False), (400, False)])
+def test_only_an_error_inside_ollama_is_worth_retrying(post, status, retryable):
+    post(FakeResponse(status_code=status))
+    assert llm_service.generate("sys", "user").retryable is retryable
+
+
+@pytest.mark.parametrize(
+    "exc", [requests.exceptions.ConnectionError(), requests.exceptions.Timeout()]
+)
+def test_not_running_and_timeouts_are_not_retryable(post, exc):
+    post(exc)
+    assert llm_service.generate("sys", "user").retryable is False
+
+
 # --- streaming -------------------------------------------------------------------------------
 
 import json as _json  # noqa: E402

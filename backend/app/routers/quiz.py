@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
@@ -8,8 +8,8 @@ from app import models, schemas
 from app.config import QUIZ_QUESTION_COUNT
 from app.database import get_db
 from app.deps import get_current_user
-from app.ownership import get_owned_quiz_set, get_owned_topic
-from app.services import quiz_service
+from app.ownership import get_owned_quiz_job, get_owned_quiz_set, get_owned_topic
+from app.services import quiz_jobs, quiz_service
 from app.services.mastery_service import apply_score_delta
 
 router = APIRouter(prefix="/quiz", tags=["quiz"])
@@ -70,47 +70,111 @@ def _set_out(db: Session, quiz_set: models.QuizSet) -> schemas.QuizSetOut:
     )
 
 
+def _latest_ready_set(db: Session, topic_id: int) -> Optional[models.QuizSet]:
+    return (
+        db.query(models.QuizSet)
+        .filter(models.QuizSet.topic_id == topic_id, models.QuizSet.status == "ready")
+        .order_by(models.QuizSet.id.desc())
+        .first()
+    )
+
+
 @router.get("/{topic_id}", response_model=schemas.QuizState)
 def get_quiz(
     topic_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """The topic's latest quiz, if it has one. This never generates: that is a
-    slow, model-backed action and only POST .../generate does it."""
+    """The topic's latest quiz, if it has one, and its running generation, if any.
+    This never generates: that is a slow, model-backed action and only POST
+    .../generate starts it."""
     get_owned_topic(db, topic_id, current_user)
-    latest = (
-        db.query(models.QuizSet)
-        .filter(models.QuizSet.topic_id == topic_id)
-        .order_by(models.QuizSet.id.desc())
-        .first()
-    )
+    latest = _latest_ready_set(db, topic_id)
+    job = quiz_jobs.active_job(db, topic_id)
     return schemas.QuizState(
         quiz_set=_set_out(db, latest) if latest else None,
         has_material=quiz_service.topic_has_material(db, topic_id),
+        job=schemas.QuizJobOut.model_validate(job) if job else None,
     )
 
 
-@router.post("/{topic_id}/generate", response_model=schemas.QuizSetOut)
+@router.post("/{topic_id}/generate", response_model=schemas.QuizJobOut, status_code=202)
 def generate_quiz(
     topic_id: int,
-    count: int = Query(default=QUIZ_QUESTION_COUNT, ge=3, le=10),
+    count: int = Query(default=QUIZ_QUESTION_COUNT, ge=1, le=10),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Generate a new quiz set from the topic's study material. Earlier sets
-    (and their attempts) are kept; the new one becomes the latest."""
+    """Start writing a new quiz from the topic's study material, in the
+    background, and return the job to poll (GET /quiz/jobs/{id}). When it
+    finishes, the new set becomes the latest; earlier sets and their attempts are
+    kept. 409 if there is nothing to write from or a job is already running."""
     topic = get_owned_topic(db, topic_id, current_user)
     try:
-        with quiz_service.generation_slot(topic.id):
-            quiz_set = quiz_service.create_quiz_set(db, topic, count=count)
-    except quiz_service.GenerationInProgress as exc:
+        job = quiz_jobs.start_job(db, topic, count)
+    except (quiz_jobs.GenerationInProgress, quiz_service.NoMaterialError) as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-    except quiz_service.NoMaterialError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-    except quiz_service.QuizGenerationError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-    return _set_out(db, quiz_set)
+    return schemas.QuizJobOut.model_validate(job)
+
+
+@router.get("/jobs/{job_id}", response_model=schemas.QuizJobOut)
+def get_quiz_job(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    job = get_owned_quiz_job(db, job_id, current_user)
+    if job.status in quiz_jobs.ACTIVE_STATUSES:
+        # A dead worker must not poll as "running" for ever.
+        quiz_jobs.fail_stale_jobs(db, job.topic_id)
+        db.refresh(job)
+    return schemas.QuizJobOut.model_validate(job)
+
+
+@router.get("/{topic_id}/history", response_model=List[schemas.QuizSummary])
+def quiz_history(
+    topic_id: int,
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """The topic's past quizzes, newest first: when, how many questions, and the
+    result if it was taken. Questions and answers come from GET /quiz/sets/{id}."""
+    get_owned_topic(db, topic_id, current_user)
+    sets = (
+        db.query(models.QuizSet)
+        .filter(models.QuizSet.topic_id == topic_id, models.QuizSet.status == "ready")
+        .order_by(models.QuizSet.id.desc())
+        .limit(limit)
+        .all()
+    )
+    summaries = []
+    for quiz_set in sets:
+        attempt = quiz_set.attempts[-1] if quiz_set.attempts else None
+        summaries.append(
+            schemas.QuizSummary(
+                id=quiz_set.id,
+                created_at=quiz_set.created_at,
+                question_count=len(quiz_set.questions),
+                taken=attempt is not None,
+                correct=attempt.correct if attempt else None,
+                total=attempt.total if attempt else None,
+                score_percent=attempt.score_percent if attempt else None,
+                attempted_at=attempt.created_at if attempt else None,
+            )
+        )
+    return summaries
+
+
+@router.get("/sets/{quiz_set_id}", response_model=schemas.QuizSetOut)
+def get_quiz_set(
+    quiz_set_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Any past quiz. As everywhere, the answers and explanations are only in
+    the response once it has been graded."""
+    return _set_out(db, get_owned_quiz_set(db, quiz_set_id, current_user))
 
 
 @router.post("/submit", response_model=schemas.QuizAttemptOut)

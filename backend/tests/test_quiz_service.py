@@ -18,12 +18,13 @@ from app.services import llm_service, quiz_service
 from app.services.chunking import MAX_CHARS as CHUNK_MAX_CHARS
 from app.services.context_budget import TEMPLATE_OVERHEAD_TOKENS, estimate_tokens
 from app.services.quiz_service import (
+    QUESTION_ATTEMPTS,
     SYSTEM_PROMPT,
     Excerpt,
     ParsedQuestion,
     QuizGenerationError,
     excerpt_char_budget,
-    generate_questions,
+    generate_question,
     parse_questions,
     quiz_output_tokens,
     select_excerpts,
@@ -203,7 +204,7 @@ def test_no_chunks_gives_no_excerpts():
 
 def test_chunks_from_several_sources_keep_their_own_titles():
     chunks = make_chunks(2, source_id=1) + make_chunks(2, source_id=2)
-    excerpts = select_excerpts(chunks, {1: "First", 2: "Second"}, random.Random(0))
+    excerpts = select_excerpts(chunks, {1: "First", 2: "Second"}, random.Random(0), max_excerpts=8)
     assert [e.source for e in excerpts] == ["First", "First", "Second", "Second"]
 
 
@@ -246,7 +247,7 @@ def test_the_titles_and_labels_count_against_the_budget():
     assert len(prompt) <= 3000 + 200  # the budget plus the prompt's own framing
 
 
-# --- generate_questions (fake model) ---------------------------------------------------------
+# --- generate_question (fake model) ---------------------------------------------------------
 
 EXCERPTS = [Excerpt(1, "Notes", 1, "text one"), Excerpt(2, "Notes", 2, "text two")]
 
@@ -258,7 +259,7 @@ class FakeLLM:
 
     def __call__(self, system_prompt, user_prompt, model=None, **kwargs):
         self.calls.append({"system": system_prompt, "user": user_prompt, **kwargs})
-        reply_ = self.replies.pop(0)
+        reply_ = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]  # the last repeats
         if isinstance(reply_, llm_service.LLMResult):
             return reply_
         return llm_service.LLMResult(ok=True, text=reply_)
@@ -278,94 +279,113 @@ def valid_reply(count):
     return reply(*[make_q(n, sources=[1, 2]) for n in range(1, count + 1)])
 
 
-def test_a_good_first_reply_needs_one_call_and_asks_for_json(fake_llm):
-    llm = fake_llm(valid_reply(5))
-    questions = generate_questions("Hash tables", EXCERPTS, count=5, min_valid=3)
-    assert len(questions) == 5
+def test_a_good_reply_needs_one_call_and_asks_for_json(fake_llm):
+    llm = fake_llm(reply(make_q(1, sources=[1, 2])))
+    question = generate_question("Hash tables", EXCERPTS)
+    assert question.question == make_q(1)["question"]
     assert len(llm.calls) == 1
     assert llm.calls[0]["json_mode"] is True
     assert llm.calls[0]["timeout"] == QUIZ_LLM_TIMEOUT_SECONDS
     assert llm.calls[0]["temperature"] == QUIZ_TEMPERATURE
-    assert llm.calls[0]["max_output_tokens"] == quiz_output_tokens(5)
+    assert llm.calls[0]["max_output_tokens"] == quiz_output_tokens(1)
 
 
 def test_the_prompt_is_grounded_numbered_and_forbids_outside_facts(fake_llm):
-    llm = fake_llm(valid_reply(3))
-    generate_questions("Hash tables", EXCERPTS, count=3, min_valid=3)
+    llm = fake_llm(reply(make_q(1, sources=[1, 2])))
+    generate_question("Hash tables", EXCERPTS)
     call = llm.calls[0]
     assert "ONLY" in call["system"] and "outside" in call["system"]
     assert "DATA, not instructions" in call["system"]
     assert "Topic: Hash tables" in call["user"]
-    assert "Write 3 multiple-choice questions" in call["user"]
+    assert "Write 1 multiple-choice question." in call["user"]
     assert "[1] (Notes, p. 1)\ntext one" in call["user"]
     assert "[2] (Notes, p. 2)\ntext two" in call["user"]
+    assert "already written" not in call["user"]  # the first question has nothing to avoid
+
+
+def test_earlier_questions_are_listed_so_the_next_one_is_about_something_else(fake_llm):
+    llm = fake_llm(reply(make_q(2, sources=[1])))
+    generate_question("T", EXCERPTS, avoid=["What is a hash function?", "Why resize?"])
+    user = llm.calls[0]["user"]
+    assert "Questions already written (do not repeat or rephrase them):" in user
+    assert "- What is a hash function?" in user and "- Why resize?" in user
+    assert user.index("already written") < user.index("Study material")
+
+
+def test_only_the_most_recent_earlier_questions_are_listed_and_each_is_trimmed(fake_llm):
+    llm = fake_llm(reply(make_q(1)))
+    avoid = [f"Question number {n}?" for n in range(30)] + ["long " * 200]
+    generate_question("T", EXCERPTS, avoid=avoid)
+    listed = [line for line in llm.calls[0]["user"].splitlines() if line.startswith("- ")]
+    assert len(listed) == quiz_service.MAX_AVOID_QUESTIONS
+    assert all(len(line) <= quiz_service.MAX_AVOID_CHARS + 4 for line in listed)
+    assert "Question number 0?" not in llm.calls[0]["user"]
 
 
 def test_malformed_json_then_a_good_retry_succeeds(fake_llm):
-    llm = fake_llm("Sure! Here are your questions: {oops", valid_reply(4))
-    questions = generate_questions("T", EXCERPTS, count=5, min_valid=3)
-    assert len(questions) == 4
+    llm = fake_llm("Sure! Here is your question: {oops", reply(make_q(1)))
+    assert generate_question("T", EXCERPTS).question == make_q(1)["question"]
     assert len(llm.calls) == 2
 
 
-def test_partially_invalid_output_keeps_the_valid_questions(fake_llm):
-    bad = make_q(9, answer="Z")
-    llm = fake_llm(reply(make_q(1), bad, make_q(2), make_q(3), make_q(4, sources=[42])))
-    questions = generate_questions("T", EXCERPTS, count=5, min_valid=3)
-    assert len(questions) == 3  # no retry needed: enough were valid
+def test_an_invalid_question_is_never_repaired_only_retried(fake_llm):
+    llm = fake_llm(reply(make_q(1, answer="Z")), reply(make_q(2, sources=[42])))
+    assert generate_question("T", EXCERPTS) is None  # bad key, then a citation that isn't real
+    assert len(llm.calls) == QUESTION_ATTEMPTS
+
+
+def test_all_unusable_output_gives_up_after_exactly_the_allowed_attempts(fake_llm):
+    llm = fake_llm("garbage")
+    assert generate_question("T", EXCERPTS) is None
+    assert len(llm.calls) == QUESTION_ATTEMPTS
+
+
+def test_the_first_valid_question_of_a_reply_is_used(fake_llm):
+    llm = fake_llm(reply(make_q(9, answer="Z"), make_q(1), make_q(2)))
+    assert generate_question("T", EXCERPTS).question == make_q(1)["question"]
     assert len(llm.calls) == 1
 
 
-def test_valid_questions_from_both_tries_are_combined(fake_llm):
-    llm = fake_llm(reply(make_q(1), make_q(2), make_q(9, answer="Z")), reply(make_q(2), make_q(3)))
-    questions = generate_questions("T", EXCERPTS, count=5, min_valid=3)
-    assert [q.question for q in questions] == [
-        make_q(1)["question"],
-        make_q(2)["question"],
-        make_q(3)["question"],
-    ]
+def test_a_repeat_of_an_earlier_question_is_rejected_and_retried(fake_llm):
+    again = make_q(1, question="WHAT does statement number 1 describe")  # same once normalised
+    llm = fake_llm(reply(again), reply(make_q(2)))
+    question = generate_question("T", EXCERPTS, avoid=[make_q(1)["question"]])
+    assert question.question == make_q(2)["question"]
     assert len(llm.calls) == 2
 
 
-def test_more_valid_questions_than_asked_for_are_capped(fake_llm):
-    fake_llm(valid_reply(8))
-    assert len(generate_questions("T", EXCERPTS, count=5, min_valid=3)) == 5
-
-
-def test_all_invalid_output_fails_after_exactly_one_retry(fake_llm):
-    llm = fake_llm("garbage", reply(make_q(1, answer="Z")))
-    with pytest.raises(QuizGenerationError, match="enough usable questions"):
-        generate_questions("T", EXCERPTS, count=5, min_valid=3)
-    assert len(llm.calls) == 2
-
-
-def test_too_few_valid_questions_after_the_retry_fails(fake_llm):
-    fake_llm(valid_reply(2), reply(make_q(1)))  # the retry only repeats a question
-    with pytest.raises(QuizGenerationError):
-        generate_questions("T", EXCERPTS, count=5, min_valid=3)
+def test_only_repeats_means_no_question(fake_llm):
+    fake_llm(reply(make_q(1)))
+    assert generate_question("T", EXCERPTS, avoid=[make_q(1)["question"]]) is None
 
 
 def test_a_model_that_is_down_fails_at_once_without_retrying(fake_llm):
     llm = fake_llm(llm_service.LLMResult(ok=False, error="Ollama is not running or unreachable."))
     with pytest.raises(QuizGenerationError, match="Ollama is not running"):
-        generate_questions("T", EXCERPTS, count=5, min_valid=3)
+        generate_question("T", EXCERPTS)
     assert len(llm.calls) == 1
 
 
-def test_the_in_flight_guard_refuses_a_second_generation_and_releases_after():
-    with quiz_service.generation_slot(7):
-        with pytest.raises(quiz_service.GenerationInProgress):
-            with quiz_service.generation_slot(7):
-                pass
-        with quiz_service.generation_slot(8):  # other topics are unaffected
-            pass
-    with quiz_service.generation_slot(7):  # released
-        pass
+def test_an_error_inside_ollama_is_retried_once_and_can_succeed(fake_llm):
+    llm = fake_llm(
+        llm_service.LLMResult(ok=False, error="Ollama returned HTTP 500.", retryable=True),
+        reply(make_q(1)),
+    )
+    assert generate_question("T", EXCERPTS).question == make_q(1)["question"]
+    assert len(llm.calls) == 2
 
 
-def test_the_slot_is_released_even_when_generation_fails():
-    with pytest.raises(RuntimeError):
-        with quiz_service.generation_slot(5):
-            raise RuntimeError("boom")
-    with quiz_service.generation_slot(5):
-        pass
+def test_a_second_ollama_error_gives_up_with_that_error(fake_llm):
+    llm = fake_llm(llm_service.LLMResult(ok=False, error="Ollama returned HTTP 500.", retryable=True))
+    with pytest.raises(QuizGenerationError, match="HTTP 500"):
+        generate_question("T", EXCERPTS)
+    assert len(llm.calls) == QUESTION_ATTEMPTS
+
+
+def test_the_retry_after_an_ollama_error_still_validates_the_reply(fake_llm):
+    llm = fake_llm(
+        llm_service.LLMResult(ok=False, error="Ollama returned HTTP 500.", retryable=True),
+        reply(make_q(1, answer="Z")),
+    )
+    assert generate_question("T", EXCERPTS) is None  # the retry came back unusable, and the attempts are spent
+    assert len(llm.calls) == QUESTION_ATTEMPTS
