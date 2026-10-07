@@ -7,7 +7,7 @@ from app import models, schemas
 from app.database import get_db
 from app.deps import get_current_user
 from app.ownership import get_owned_course, get_owned_topic
-from app.services.mastery_service import apply_score_delta, set_score
+from app.services.mastery_service import apply_score_delta, override_score
 
 router = APIRouter(tags=["mastery"])
 
@@ -57,7 +57,7 @@ def update_mastery(
     # The status follows from the score (see mastery_service); it can't be
     # set directly here, only via POST .../missed.
     if payload.score is not None:
-        set_score(mastery, payload.score)
+        override_score(mastery, payload.score)
 
     db.commit()
     db.refresh(mastery)

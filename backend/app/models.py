@@ -16,9 +16,12 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy import Enum as SQLEnum
+from sqlalchemy import event
 from sqlalchemy.orm import relationship
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.database import Base
+from app.services import mastery_model
 
 
 class SourceType(str, enum.Enum):
@@ -233,6 +236,9 @@ class Mastery(Base):
     topic_id = Column(
         Integer, ForeignKey("topics.id", ondelete="CASCADE"), primary_key=True
     )
+    # What the student sees. For a topic with a review history (last_reviewed_at set) it
+    # fades between reviews, so the value stored here is only the score at the last
+    # review; every load recomputes the faded score (see the event hooks below).
     score = Column(Integer, default=0, nullable=False)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     flagged_for_revision = Column(Boolean, default=False, nullable=False)
@@ -241,8 +247,34 @@ class Mastery(Base):
         default=MasteryStatus.unmastered,
         nullable=False,
     )
+    # The memory model (services/mastery_model.py): how well the topic is known (0-1),
+    # the half-life of that memory in days, and when it was last reviewed. A row with no
+    # last_reviewed_at has no history and is left as stored.
+    estimate = Column(Float, default=0.0, nullable=False, server_default="0")
+    stability_days = Column(Float, default=3.0, nullable=False, server_default="3")
+    last_reviewed_at = Column(DateTime, nullable=True)
 
     topic = relationship("Topic", back_populates="mastery")
+
+    @property
+    def due_for_review(self) -> bool:
+        return mastery_model.is_due_for_review(self, datetime.utcnow())
+
+
+def _show_faded_score(target, *_args) -> None:
+    """Whenever a mastery row is loaded or refreshed, show the score it has faded to.
+    Set as committed values, so reading never makes the row dirty or writes to the
+    database; every place that reads mastery (graph, tree, tutor, API) gets this for free."""
+    fields = mastery_model.refreshed_fields(target)
+    if fields is None:
+        return
+    score, status = fields
+    set_committed_value(target, "score", score)
+    set_committed_value(target, "status", MasteryStatus(status))
+
+
+event.listen(Mastery, "load", _show_faded_score)
+event.listen(Mastery, "refresh", _show_faded_score)
 
 
 class StudySession(Base):

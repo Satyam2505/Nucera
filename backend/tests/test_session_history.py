@@ -59,7 +59,7 @@ def test_real_activity_shows_up_a_chat_question_and_a_graded_quiz(client, db_ses
     qid = quiz_set.questions[0].id
     client.post("/quiz/submit", json={"quiz_set_id": quiz_set.id, "answers": [{"question_id": qid, "selected_option": "A"}]})
 
-    assert [(i["type"], i["score_delta"]) for i in client.get("/sessions").json()] == [("quiz", 10), ("chat", 0)]
+    assert [(i["type"], i["score_delta"]) for i in client.get("/sessions").json()] == [("quiz", 25), ("chat", 0)]  # 1 of 1 on a new topic: weight 1/4
 
 
 def test_filtering_by_topic(client):

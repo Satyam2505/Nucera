@@ -699,12 +699,14 @@ def test_a_perfect_submission_scores_100_and_raises_mastery(client, db_session, 
     resp = submit(client, quiz, answers(quiz["keys"], correct_ids=quiz["ids"]))
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert (body["correct"], body["total"], body["score_percent"], body["score_delta"]) == (5, 5, 100.0, 10)
+    # A first quiz of 5 questions is worth weight 5/8 of the evidence: estimate 0.625, so a
+    # score of 62 (the memory model, services/mastery_model.py), not an instant 100.
+    assert (body["correct"], body["total"], body["score_percent"], body["score_delta"]) == (5, 5, 100.0, 62)
     assert all(r["is_correct"] for r in body["results"])
-    assert body["mastery"]["score"] == 10 and body["mastery"]["status"] == "in_progress"
+    assert body["mastery"]["score"] == 62 and body["mastery"]["status"] == "in_progress"
     assert count(db_session, models.QuizAttempt) == 1
     sessions = db_session.query(models.StudySession).all()
-    assert [(s.type, s.score_delta) for s in sessions] == [(models.SessionType.quiz, 10)]
+    assert [(s.type, s.score_delta) for s in sessions] == [(models.SessionType.quiz, 62)]
 
 
 def test_results_carry_the_key_the_choice_the_explanation_and_citations(client, quiz):
@@ -728,17 +730,25 @@ def test_results_carry_the_key_the_choice_the_explanation_and_citations(client, 
 
 
 def test_unanswered_questions_count_as_wrong(client, quiz):
-    # 3 correct answers out of 5 questions, 2 left blank -> 60%, delta +2.
+    # 3 correct answers out of 5 questions, 2 left blank -> 60%: estimate 5/8 x 0.6 = 0.375.
     body = submit(client, quiz, answers(quiz["keys"], correct_ids=quiz["ids"][:3])).json()
-    assert (body["correct"], body["total"], body["score_percent"], body["score_delta"]) == (3, 5, 60.0, 2)
+    assert (body["correct"], body["total"], body["score_percent"], body["score_delta"]) == (3, 5, 60.0, 38)
     unanswered = [r for r in body["results"] if r["chosen"] is None]
     assert len(unanswered) == 2 and not any(r["is_correct"] for r in unanswered)
 
 
-def test_all_wrong_lowers_the_score_but_never_below_zero(client, quiz):
+def test_all_wrong_on_a_new_topic_never_goes_below_zero(client, quiz):
     body = submit(client, quiz, answers(quiz["keys"], wrong_ids=quiz["ids"])).json()
-    assert (body["correct"], body["score_percent"], body["score_delta"]) == (0, 0.0, -10)
+    assert (body["correct"], body["score_percent"], body["score_delta"]) == (0, 0.0, 0)
     assert body["mastery"]["score"] == 0 and body["mastery"]["status"] == "unmastered"
+
+
+def test_all_wrong_lowers_a_topic_that_was_known(client, quiz):
+    client.put(f"/mastery/{quiz['topic']}", json={"score": 50})  # known at 50 (a fresh review)
+    body = submit(client, quiz, answers(quiz["keys"], wrong_ids=quiz["ids"])).json()
+    # 5 questions: weight 5/8, so the estimate falls from 0.5 to 0.375 x 0.5 = 0.1875 -> 19.
+    assert (body["correct"], body["score_delta"]) == (0, -31)
+    assert body["mastery"]["score"] == 19 and body["mastery"]["status"] == "in_progress"
 
 
 def test_an_empty_submission_is_a_400(client, db_session, quiz):
@@ -782,7 +792,7 @@ def test_a_set_can_only_be_graded_once(client, db_session, quiz):
     assert again.status_code == 409
     assert "already submitted" in again.json()["detail"]
     assert count(db_session, models.QuizAttempt) == 1
-    assert client.get(f"/mastery/{quiz['topic']}").json()["score"] == 10  # not farmed
+    assert client.get(f"/mastery/{quiz['topic']}").json()["score"] == 62  # not farmed
 
 
 def test_the_graded_set_shows_its_results_on_reload_but_the_ungraded_one_hides_them(client, quiz):

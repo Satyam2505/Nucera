@@ -148,6 +148,24 @@ class MasteryOut(BaseModel):
     last_updated: datetime
     status: MasteryStatus
     flagged_for_revision: bool
+    # When the topic was last reviewed (a graded quiz or a manual score), and whether it
+    # has faded enough to be due. None / False for a topic with no review history.
+    last_reviewed_at: Optional[datetime] = None
+    due_for_review: bool = False
+
+
+class NextStepOut(BaseModel):
+    """One suggestion for what to study next in a course."""
+
+    topic_id: int
+    topic_name: str
+    module_name: str
+    # "review": learned but faded, due now. "ready": not mastered, prerequisites mastered.
+    kind: str
+    reason: str
+    score: int
+    status: MasteryStatus
+    due_for_review: bool
 
 
 class MasteryUpdate(BaseModel):

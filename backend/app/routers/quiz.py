@@ -10,7 +10,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.ownership import get_owned_quiz_job, get_owned_quiz_set, get_owned_topic
 from app.services import quiz_jobs, quiz_service
-from app.services.mastery_service import apply_score_delta
+from app.services.mastery_service import record_quiz
 
 router = APIRouter(prefix="/quiz", tags=["quiz"])
 
@@ -210,7 +210,9 @@ def submit_quiz(
     total = len(questions_by_id)
     correct = sum(1 for qid, q in questions_by_id.items() if chosen.get(qid) == q.correct_option)
     score_percent = correct / total * 100
-    score_delta = round((score_percent - 50) / 5)
+    # How much the topic's score moves comes from the memory model (a longer quiz is more
+    # evidence; a topic that had faded gains more from being reviewed): see mastery_model.
+    score_delta = record_quiz(mastery, correct, total)
 
     attempt = models.QuizAttempt(
         quiz_set_id=quiz_set.id,
@@ -226,7 +228,6 @@ def submit_quiz(
             topic_id=quiz_set.topic_id, type=models.SessionType.quiz, score_delta=score_delta
         )
     )
-    apply_score_delta(mastery, score_delta)
 
     try:
         db.commit()
