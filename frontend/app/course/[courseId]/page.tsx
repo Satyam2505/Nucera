@@ -7,6 +7,7 @@ import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import ChatView from "@/components/course/ChatView";
 import CourseMenu from "@/components/course/CourseMenu";
 import GraphView from "@/components/course/GraphView";
+import HistoryView from "@/components/course/HistoryView";
 import MasteryView from "@/components/course/MasteryView";
 import ModuleRail from "@/components/course/ModuleRail";
 import NameDialog from "@/components/course/NameDialog";
@@ -247,6 +248,7 @@ export default function CourseWorkspace() {
                   />
                 )}
                 {view === "mastery" && <MasteryView tree={tree} />}
+                {view === "history" && <HistoryView tree={tree} />}
                 {view === "sources" && (
                   <SourcesView
                     topicId={activeTopicId}

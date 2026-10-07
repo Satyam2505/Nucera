@@ -2,22 +2,31 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import QuizHistory from "@/components/course/QuizHistory";
 import QuizResults from "@/components/course/QuizResults";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { api, ApiError, QuizAttempt, QuizSet, QuizState } from "@/lib/api";
+import { api, ApiError, QuizAttempt, QuizJob, QuizSet, QuizState } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
 import { allAnswered, answerPayload, answeredCount } from "@/lib/quiz";
+import {
+  isActive,
+  jobOutcome,
+  MAX_POLL_FAILURES,
+  POLL_INTERVAL_MS,
+  progressPercent,
+  progressText,
+} from "@/lib/quiz-jobs";
 
 type Phase =
   | { kind: "loading" }
   | { kind: "load-error"; message: string }
   | { kind: "no-material" }
   | { kind: "empty" }
-  | { kind: "generating" }
+  | { kind: "generating"; job: QuizJob }
   | { kind: "generate-error"; status: number; message: string }
   | { kind: "quiz"; set: QuizSet }
   | { kind: "results"; attempt: QuizAttempt };
@@ -45,6 +54,12 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Said when a quiz came out shorter than asked for (the model failed part-way).
+  const [notice, setNotice] = useState<string | null>(null);
+  // The id of the past quiz being viewed, or null for the topic's latest.
+  const [pastId, setPastId] = useState<number | null>(null);
+  // Bumped whenever the list of past quizzes may have changed.
+  const [historyKey, setHistoryKey] = useState(0);
   // Bumped by every load and generate, so a slow response for a topic the user
   // has since left (or for a quiz they replaced) is ignored when it lands.
   const latest = useRef(0);
@@ -52,7 +67,9 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
   const applyState = useCallback((state: QuizState) => {
     setAnswers({});
     setSubmitError(null);
-    if (state.quiz_set?.attempt) setPhase({ kind: "results", attempt: state.quiz_set.attempt });
+    setPastId(null);
+    if (state.job && isActive(state.job)) setPhase({ kind: "generating", job: state.job });
+    else if (state.quiz_set?.attempt) setPhase({ kind: "results", attempt: state.quiz_set.attempt });
     else if (state.quiz_set) setPhase({ kind: "quiz", set: state.quiz_set });
     else setPhase(state.has_material ? { kind: "empty" } : { kind: "no-material" });
   }, []);
@@ -63,7 +80,10 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
     setPhase({ kind: "loading" });
     try {
       const state = await api.getQuiz(topicId);
-      if (requestId === latest.current) applyState(state);
+      if (requestId === latest.current) {
+        applyState(state);
+        setHistoryKey((k) => k + 1);
+      }
     } catch (err) {
       if (requestId === latest.current) {
         setPhase({ kind: "load-error", message: errorText(err, "Couldn't load the quiz.") });
@@ -72,27 +92,102 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
   }, [topicId, applyState]);
 
   // Reading is safe to repeat (it never generates), so refetching on a topic
-  // switch or an upload is cheap.
+  // switch or an upload is cheap. A generation still running on the server is
+  // picked up here too: leaving the page doesn't stop it.
   useEffect(() => {
+    setNotice(null);
     load();
   }, [load, refreshKey]);
+
+  // While a job runs, ask how far it has got. The effect depends on the job's id
+  // only, so the timer isn't restarted by every progress update it causes.
+  const generatingJobId = phase.kind === "generating" ? phase.job.id : null;
+  useEffect(() => {
+    if (generatingJobId === null || topicId === null) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
+
+    const finish = async (job: QuizJob) => {
+      const outcome = jobOutcome(job);
+      if (outcome.kind === "failed") {
+        setPhase({ kind: "generate-error", status: 0, message: outcome.message });
+        return;
+      }
+      // The notice is set before reloading: the reload moves the page out of its
+      // "generating" state, which tears this effect down (`cancelled`), so
+      // anything after the await would never run.
+      if (outcome.kind === "partial") setNotice(outcome.notice);
+      await load();
+    };
+
+    const tick = async () => {
+      try {
+        const job = await api.getQuizJob(generatingJobId);
+        if (cancelled) return;
+        failures = 0;
+        if (isActive(job)) {
+          setPhase({ kind: "generating", job });
+          timer = setTimeout(tick, POLL_INTERVAL_MS);
+        } else {
+          await finish(job);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        failures += 1;
+        if (failures >= MAX_POLL_FAILURES) {
+          setPhase({
+            kind: "generate-error",
+            status: err instanceof ApiError ? err.status : 0,
+            message: errorText(err, "Lost contact with the server while the quiz was being written."),
+          });
+        } else {
+          timer = setTimeout(tick, POLL_INTERVAL_MS);
+        }
+      }
+    };
+
+    timer = setTimeout(tick, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [generatingJobId, topicId, load]);
 
   async function generate() {
     if (topicId === null || phase.kind === "generating") return;
     const requestId = ++latest.current;
-    setPhase({ kind: "generating" });
     setAnswers({});
     setSubmitError(null);
+    setNotice(null);
+    setPastId(null);
     try {
-      const set = await api.generateQuiz(topicId);
-      if (requestId === latest.current) setPhase({ kind: "quiz", set });
+      const job = await api.generateQuiz(topicId);
+      if (requestId === latest.current) setPhase({ kind: "generating", job });
     } catch (err) {
       if (requestId !== latest.current) return;
       setPhase({
         kind: "generate-error",
         status: err instanceof ApiError ? err.status : 0,
-        message: errorText(err, "Couldn't generate a quiz."),
+        message: errorText(err, "Couldn't start the quiz."),
       });
+    }
+  }
+
+  async function openPast(quizSetId: number) {
+    const requestId = ++latest.current;
+    setAnswers({});
+    setSubmitError(null);
+    setNotice(null);
+    try {
+      const set = await api.getQuizSet(quizSetId);
+      if (requestId !== latest.current) return;
+      setPastId(quizSetId);
+      setPhase(set.attempt ? { kind: "results", attempt: set.attempt } : { kind: "quiz", set });
+    } catch (err) {
+      if (requestId === latest.current) {
+        setPhase({ kind: "load-error", message: errorText(err, "Couldn't open that quiz.") });
+      }
     }
   }
 
@@ -108,6 +203,8 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
       });
       if (requestId !== latest.current) return;
       setPhase({ kind: "results", attempt });
+      setNotice(null);
+      setHistoryKey((k) => k + 1);
       await refresh();
     } catch (err) {
       if (requestId !== latest.current) return;
@@ -126,6 +223,21 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
   return (
     <div className="p-8 max-w-2xl mx-auto space-y-5">
       <h2 className="text-lg font-semibold text-[var(--ink)]">Quiz — {topic?.name}</h2>
+
+      {pastId !== null && (phase.kind === "quiz" || phase.kind === "results") && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-[rgba(var(--ink-rgb),0.12)] px-3 py-2 text-xs text-stone-600 dark:text-stone-300">
+          <span>You are looking at a past quiz.</span>
+          <button type="button" onClick={load} className="font-medium text-[var(--accent)] hover:underline">
+            Back to the latest quiz
+          </button>
+        </div>
+      )}
+
+      {notice && (
+        <Alert className="bg-[var(--warn-bg)] border-[var(--warn-border)]">
+          <AlertDescription className="text-[var(--warn-text)]">{notice}</AlertDescription>
+        </Alert>
+      )}
 
       {phase.kind === "loading" && (
         <p role="status" className="text-sm text-stone-500 dark:text-stone-400">
@@ -168,19 +280,7 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
         </Card>
       )}
 
-      {phase.kind === "generating" && (
-        <Card className="surface rounded-xl p-5 space-y-3 border-[rgba(var(--ink-rgb),0.09)]">
-          <p role="status" className="text-sm font-medium text-[var(--ink)]">
-            Generating questions from your material...
-          </p>
-          <p className="text-sm text-stone-600 dark:text-stone-300">
-            This can take a few minutes on a CPU. You can stay on this page.
-          </p>
-          <Button disabled className={primaryButton}>
-            Generating...
-          </Button>
-        </Card>
-      )}
+      {phase.kind === "generating" && <GeneratingCard job={phase.job} />}
 
       {phase.kind === "generate-error" && (
         <div className="space-y-3">
@@ -213,7 +313,41 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
       )}
 
       {phase.kind === "results" && <QuizResults attempt={phase.attempt} onNewQuiz={generate} />}
+
+      {phase.kind !== "no-material" && phase.kind !== "loading" && (
+        <QuizHistory topicId={topicId} refreshKey={historyKey} openId={pastId} onOpen={openPast} />
+      )}
     </div>
+  );
+}
+
+// Progress of the background job. Leaving the page doesn't stop it: coming back
+// to this topic picks the same job up again.
+function GeneratingCard({ job }: { job: QuizJob }) {
+  const percent = progressPercent(job);
+  return (
+    <Card className="surface rounded-xl p-5 space-y-3 border-[rgba(var(--ink-rgb),0.09)]">
+      <p role="status" className="text-sm font-medium text-[var(--ink)]">
+        {progressText(job)}
+      </p>
+      <div
+        role="progressbar"
+        aria-label="Quiz progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        className="h-2 w-full overflow-hidden rounded-full bg-[rgba(var(--ink-rgb),0.10)]"
+      >
+        <div
+          className="h-full rounded-full bg-[var(--accent)] transition-all duration-500"
+          style={{ width: `${Math.max(percent, 4)}%` }}
+        />
+      </div>
+      <p className="text-sm text-stone-600 dark:text-stone-300">
+        Each question takes a couple of minutes on a CPU. You can leave this page; the quiz keeps being written
+        and will be here when you come back.
+      </p>
+    </Card>
   );
 }
 

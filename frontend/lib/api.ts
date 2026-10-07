@@ -190,9 +190,48 @@ export interface QuizSet {
   attempt: QuizAttempt | null;
 }
 
+// A background quiz generation. It carries progress only: the finished quiz is
+// read the usual way (getQuiz), so nothing is sent ungraded that wasn't before.
+export interface QuizJob {
+  id: number;
+  topic_id: number;
+  status: "queued" | "running" | "succeeded" | "partial" | "failed";
+  requested: number;
+  completed: number;
+  error: string | null;
+  created_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
 export interface QuizState {
+  // The latest quiz that can be taken (never one still being written).
   quiz_set: QuizSet | null;
   has_material: boolean;
+  // The topic's running generation, so a reload resumes its progress.
+  job: QuizJob | null;
+}
+
+// One past quiz in a topic's list.
+export interface QuizSummary {
+  id: number;
+  created_at: string | null;
+  question_count: number;
+  taken: boolean;
+  correct: number | null;
+  total: number | null;
+  score_percent: number | null;
+  attempted_at: string | null;
+}
+
+// One entry of the study-session timeline.
+export interface SessionHistoryItem {
+  id: number;
+  topic_id: number;
+  topic_name: string;
+  type: "chat" | "quiz" | "self_report";
+  score_delta: number;
+  timestamp: string | null;
 }
 
 export interface Source {
@@ -335,10 +374,24 @@ export const api = {
   listSources: (topicId: number) => request<Source[]>(`/sources/topic/${topicId}`),
   deleteSource: (sourceId: number) =>
     request<void>(`/sources/${sourceId}`, { method: "DELETE" }),
-  // Reading never generates; generating is its own (slow) call.
+  // Reading never generates. Generating starts a background job (it takes minutes
+  // on a CPU) and returns at once; poll getQuizJob until it is no longer active,
+  // then read the quiz with getQuiz.
   getQuiz: (topicId: number) => request<QuizState>(`/quiz/${topicId}`),
   generateQuiz: (topicId: number) =>
-    request<QuizSet>(`/quiz/${topicId}/generate`, { method: "POST" }),
+    request<QuizJob>(`/quiz/${topicId}/generate`, { method: "POST" }),
+  getQuizJob: (jobId: number) => request<QuizJob>(`/quiz/jobs/${jobId}`),
+  getQuizHistory: (topicId: number) => request<QuizSummary[]>(`/quiz/${topicId}/history`),
+  getQuizSet: (quizSetId: number) => request<QuizSet>(`/quiz/sets/${quizSetId}`),
+  listSessions: (params: { topicId?: number; courseId?: number; beforeId?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params.topicId !== undefined) query.set("topic_id", String(params.topicId));
+    if (params.courseId !== undefined) query.set("course_id", String(params.courseId));
+    if (params.beforeId !== undefined) query.set("before_id", String(params.beforeId));
+    if (params.limit !== undefined) query.set("limit", String(params.limit));
+    const suffix = query.toString();
+    return request<SessionHistoryItem[]>(suffix ? `/sessions?${suffix}` : "/sessions");
+  },
   submitQuiz: (payload: {
     quiz_set_id: number;
     answers: { question_id: number; selected_option: string }[];
