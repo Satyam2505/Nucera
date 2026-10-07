@@ -40,6 +40,7 @@ def retrieve(
             page_number=match["chunk"].page_number,
             chunk_index=match["chunk"].chunk_index,
             similarity_score=match["similarity_score"],
+            keyword_match=match["keyword_match"],
             chunk_text=match["chunk"].chunk_text,
         )
         for match in matches

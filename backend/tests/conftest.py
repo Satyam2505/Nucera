@@ -21,6 +21,9 @@ from app.database import Base, SessionLocal, engine  # noqa: E402
 @pytest.fixture(scope="session", autouse=True)
 def _schema():
     Base.metadata.create_all(bind=engine)
+    from app.services.fts import ensure_fts
+
+    assert ensure_fts(engine), "the test database needs FTS5"
     yield
     engine.dispose()
     if TEST_DB_PATH.exists():

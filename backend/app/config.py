@@ -34,12 +34,31 @@ OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.2"))
 # about 350 tokens). Also the room the prompt budget keeps free.
 OLLAMA_MAX_OUTPUT_TOKENS = int(os.getenv("OLLAMA_MAX_OUTPUT_TOKENS", "600"))
 
+# Hybrid retrieval: besides the vector ranking, rank by keyword (SQLite FTS5, when
+# the database has it) and merge the two by reciprocal rank fusion. RRF_K damps how
+# much the very top ranks count (60 is the usual value); LEXICAL_LIMIT is how many
+# keyword hits are merged in.
+RETRIEVAL_HYBRID = os.getenv("RETRIEVAL_HYBRID", "true").lower() not in ("0", "false", "no", "off")
+HYBRID_RRF_K = int(os.getenv("HYBRID_RRF_K", "60"))
+HYBRID_LEXICAL_LIMIT = int(os.getenv("HYBRID_LEXICAL_LIMIT", "30"))
+
 # Below this top-match cosine similarity, retrieval is treated as "nothing
 # relevant found" and the LLM is not called at all, and only chunks at or above
 # it are sent to the model — see app/services/tutor_service.py. It depends on
 # the embedding model AND the chunk size, so re-check it
 # (tests/test_relevance_threshold.py) whenever either changes.
 RETRIEVAL_RELEVANCE_THRESHOLD = float(os.getenv("RETRIEVAL_RELEVANCE_THRESHOLD", "0.35"))
+
+# OCR for scanned PDFs (optional, local; needs `pip install -r requirements-ocr.txt`).
+# A page with fewer extracted characters than OCR_MIN_TEXT_CHARS that contains an
+# image is treated as a scan. OCR runs on the CPU at a few seconds per page and
+# inside the upload request, so a single upload is limited to OCR_MAX_PAGES pages.
+OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() not in ("0", "false", "no", "off")
+OCR_MAX_PAGES = int(os.getenv("OCR_MAX_PAGES", "30"))
+OCR_MIN_TEXT_CHARS = int(os.getenv("OCR_MIN_TEXT_CHARS", "30"))
+OCR_DPI = int(os.getenv("OCR_DPI", "150"))
+# Lines the engine is less sure of than this are dropped rather than added as noise.
+OCR_MIN_CONFIDENCE = float(os.getenv("OCR_MIN_CONFIDENCE", "0.5"))
 
 # Largest accepted upload. The cap protects the server (a file is read into
 # memory to extract its text), not the user's disk.

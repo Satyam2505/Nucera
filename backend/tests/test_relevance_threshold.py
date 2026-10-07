@@ -112,3 +112,45 @@ def test_a_question_about_the_end_of_a_long_passage_is_found(client, db_session,
     embedder's 256-token cut-off, and this query scored 0.01."""
     matches = _top_scores(client, db_session, corpus_topic, ["load factor 0.75"])
     assert matches["load factor 0.75"] > 0.2
+
+
+# --- the full gate: similarity OR a strict keyword match ---------------------------------------------------
+#
+# With hybrid search the tutor accepts a chunk when its cosine similarity clears the
+# threshold OR it contains every searchable word of the question. Measured on this
+# corpus: 27 of 28 on-topic questions are accepted (25 on similarity alone) and none
+# of the 16 off-topic ones, none of which has a keyword match at all.
+
+from app.services.tutor_service import is_relevant  # noqa: E402
+
+
+def _accepted(client, db_session, topic_id, questions):
+    accepted = {}
+    for q in questions:
+        matches = retrieve_relevant_chunks(db_session, q, user_id=client.user_id, topic_id=topic_id, top_k=5)
+        accepted[q] = any(
+            is_relevant({"similarity": m["similarity_score"], "keyword_match": m["keyword_match"]}) for m in matches
+        )
+    return accepted
+
+
+def test_the_full_gate_accepts_no_off_topic_question(client, db_session, corpus_topic):
+    accepted = _accepted(client, db_session, corpus_topic, OFF_TOPIC)
+    assert not any(accepted.values()), [q for q, ok in accepted.items() if ok]
+
+
+def test_the_full_gate_accepts_nearly_every_on_topic_question(client, db_session, corpus_topic):
+    accepted = _accepted(client, db_session, corpus_topic, ON_TOPIC)
+    refused = [q for q, ok in accepted.items() if not ok]
+    assert len(refused) <= 0.1 * len(ON_TOPIC), refused
+
+
+def test_keyword_matching_rescues_questions_that_similarity_alone_refused(client, db_session, corpus_topic):
+    by_similarity = {
+        q: retrieve_relevant_chunks(db_session, q, user_id=client.user_id, topic_id=corpus_topic, top_k=1)[0]["similarity_score"]
+        >= RETRIEVAL_RELEVANCE_THRESHOLD
+        for q in ON_TOPIC
+    }
+    full = _accepted(client, db_session, corpus_topic, ON_TOPIC)
+    assert sum(full.values()) > sum(by_similarity.values())
+    assert all(full[q] for q, ok in by_similarity.items() if ok)  # nothing accepted before is lost
