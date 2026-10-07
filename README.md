@@ -14,11 +14,16 @@ served by [Ollama](https://ollama.com).
   private to its owner; all API routes enforce ownership.
 - **Course structure** — courses contain ordered modules (chapters), which
   contain ordered topics. Rename, reorder, move and delete from the course page.
-- **Study material** — upload PDF / .txt / .md (up to 20 MB) or paste text per
-  topic. Text is chunked to fit the embedding model, embedded and stored; failed ingests leave nothing behind.
+- **Study material** — upload PDF, Word (.docx), PowerPoint (.pptx), .txt or .md
+  (up to 20 MB) or paste text per topic. Slides keep their slide number as the page;
+  scanned PDFs are read with local OCR if you install it (see below). Text is chunked to fit the embedding model, embedded and stored; failed ingests leave nothing behind.
 - **Grounded tutor** — answers use only the retrieved passages of your material,
   cite source and page, adapt depth to your mastery, and flag unmastered
-  prerequisites. If nothing relevant is found, it says so instead of guessing.
+  prerequisites. Search combines meaning (embeddings) with exact keywords (SQLite
+  FTS5), so an acronym or rare term is found too. If the topic's own material has
+  nothing relevant it looks at the rest of the course (citations then say which
+  topic each passage came from); if nothing is relevant anywhere, it says so
+  instead of guessing.
   Answers stream in as they are written (with a Stop button), render as markdown
   with maths and syntax-highlighted code, and each topic's conversation is saved
   on the server so it survives a reload or a topic switch.
@@ -94,6 +99,21 @@ npm run dev
 
 App at http://localhost:3000.
 
+### Optional: OCR for scanned PDFs
+
+A PDF whose pages are pictures has no text to read. Install local OCR (RapidOCR, CPU
+only, nothing leaves your machine) and such pages are read automatically:
+
+```
+cd backend
+pip install -r requirements-ocr.txt
+```
+
+It takes a few seconds per page and runs inside the upload, so one upload is limited to
+`OCR_MAX_PAGES` (30) scanned pages. Without it, a fully scanned PDF is refused with a
+message saying so. `requirements-ocr.txt` pins OpenCV to a build that works with the
+pinned numpy; installing `rapidocr-onnxruntime` on its own would upgrade numpy.
+
 ### Re-indexing after a chunking change
 
 Chunks used to be ~650 tokens, but the embedding model (all-MiniLM-L6-v2) reads
@@ -129,6 +149,7 @@ module. Migration 0006 removes the old placeholder quiz questions (quiz history
 in study sessions is kept). Migration 0007 adds the saved tutor conversations
 (old chats were never stored, so every topic starts empty). Migration 0008 adds
 background quiz jobs and a status on quiz sets (every existing quiz stays usable).
+Migration 0009 adds the keyword search index over existing chunks (SQLite only).
 
 ## Configuration
 
@@ -160,7 +181,7 @@ backend/app/
               prompt builder, context budget, llm, tutor, quiz, mastery, ordering
   ownership.py  every "does this belong to the caller" lookup
 backend/reindex.py          rebuild chunks/embeddings from stored text
-backend/alembic/versions/   0001 … 0008
+backend/alembic/versions/   0001 … 0009
 frontend/app/               / (home) and /course/[courseId]
 frontend/components/course/ chat, quiz, graph, mastery, sources, module rail
 frontend/lib/               API client, app state, pure helpers + tests

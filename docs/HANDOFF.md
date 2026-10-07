@@ -45,7 +45,7 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
 | 2 Tutor experience (streaming, markdown, saved chats) | `feat/phase-2-tutor-experience` (on top of phase 1) | done, awaiting your manual check |
 | 3 Quizzes (background jobs, DB guard, history screens) | `feat/phase-3-quizzes` (on top of phase 2) | done, awaiting your manual check |
 | 4 Prerequisites and learning model | `feat/phase-4-prerequisites` (on top of phase 3) | prerequisites done; **mastery model is a proposal only, waiting for your answer** (`docs/mastery-model-proposal.md`) |
-| 5 Retrieval breadth and inputs | — | not started |
+| 5 Retrieval breadth and inputs | `feat/phase-5-retrieval-inputs` (on top of phase 4) | done, awaiting your manual check |
 | 6 Tooling and hardening | — | not started |
 
 ### Phase 1 — what changed
@@ -200,6 +200,49 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
 - Verified: headless Chromium (13 checks: add, picker leaves out loop candidates, a
   stale-page loop refused with the reason shown, remove; the only "failure" is Chromium
   logging the deliberate HTTP 400).
+
+### Phase 5 — what changed
+
+- **Hybrid search.** An FTS5 index over `chunks.chunk_text` (external-content table, `porter
+  unicode61` tokenizer, three triggers so nothing in the app writes to it; migration 0009
+  backfills existing chunks and has its own SQL copy, tested to equal `services/fts.ensure_fts`).
+  `retrieve_relevant_chunks` merges the vector and keyword rankings by reciprocal rank fusion
+  (`RETRIEVAL_HYBRID`, `HYBRID_RRF_K`). SQLite only: on Postgres retrieval stays vector-only.
+  Questions are turned into quoted terms (no FTS syntax can leak in; hostile strings are
+  tested) after dropping stopwords.
+- **What it actually buys.** Not a different top result in my tests (vectors already rank the
+  right chunk first for a bare rare word) but a trustworthy *relevance* signal: "tombstone"
+  has cosine 0.27, under the 0.35 threshold, so on similarity alone the tutor refused it.
+  Results now carry `keyword_match` = the chunk contains *every* searchable word of the
+  question, and the tutor treats `similarity >= threshold OR keyword_match` as relevant
+  (`tutor_service.is_relevant`). On the labelled corpus: 27 of 28 on-topic questions accepted
+  (25 before), still **0 of 16 off-topic**, none of which has any keyword match. The threshold
+  stays 0.35.
+- **Course-wide fallback.** If nothing in the topic is relevant, the search widens to the same
+  course (never another course or user; this topic's chunks are excluded as already judged).
+  The prompt says the passages come from other topics, and citations gain a `topic` field,
+  shown in the chat as "Source, p. 7 · from Hashing". Saved with the conversation.
+- **.docx and .pptx uploads** (python-docx, python-pptx, added to requirements.txt). Word:
+  paragraphs and tables (a row per line) in order, one untagged page. PowerPoint: one page
+  per slide (slide number = page number), title, text boxes, tables, groups and speaker notes.
+  Files are checked as real zip/Office files before parsing, with an expansion-size cap
+  against zip bombs; legacy .doc/.ppt are refused.
+- **OCR, local.** RapidOCR (ONNX, CPU) in `services/ocr_service.py`, optional via
+  `requirements-ocr.txt`. A PDF page with almost no text and a picture is OCR'd; pages with
+  text are not; confidence-filtered, reading-order sorted. Limited to `OCR_MAX_PAGES` (30)
+  scanned pages per upload because it runs inside the request (a few seconds a page). A fully
+  scanned PDF without OCR is refused with instructions. Verified with the real engine on a
+  rendered page.
+- **Environment trap found:** `pip install rapidocr-onnxruntime` upgraded numpy 1.26.4 to 2.5
+  (via OpenCV 5), which could break torch/sentence-transformers. `requirements-ocr.txt` pins
+  `opencv-python==4.10.0.84`; `pip check` is clean with numpy 1.26.4 restored.
+
+### Phase 5 — things to know
+
+- Your `dev.db` needs `alembic upgrade head` (it is still on the pre-0005 schema) before it
+  has the keyword index; until then the app has no hybrid search.
+- OCR is the slow path of an upload; a 30-page scan can take a couple of minutes with no
+  progress shown. Not streamed or backgrounded yet.
 
 ### Phase 4 — things to know
 
