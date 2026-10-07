@@ -197,6 +197,7 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
                       >
                         {s.source}
                         {s.page != null ? `, p. ${s.page}` : ""}
+                        {s.topic ? ` · from ${s.topic}` : ""}
                       </Badge>
                     ))}
                   </div>

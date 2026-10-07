@@ -16,6 +16,8 @@ class RetrievedContext:
     source: str
     page: Optional[int]
     text: str
+    # The topic the passage belongs to, when it is not the topic being studied.
+    topic: Optional[str] = None
 
 
 @dataclass
@@ -99,6 +101,7 @@ def build_budgeted_prompt(
     gaps: List[PrerequisiteGap],
     history: Optional[List[dict]] = None,
     max_chars: Optional[int] = None,
+    from_other_topics: bool = False,
 ) -> BuiltPrompt:
     """Assemble the user message. With `max_chars` the result is kept within
     it, giving up the least important material first: the question, topic,
@@ -128,6 +131,13 @@ def build_budgeted_prompt(
         top.append(
             "Prerequisite gaps for this topic (mention briefly, don't block the "
             f"answer): {gap_lines}"
+        )
+        top.append("")
+    if from_other_topics:
+        top.append(
+            "Note: this topic's own material has nothing relevant to the question. The "
+            "study material below comes from OTHER topics of the same course; say so "
+            "briefly in your answer."
         )
         top.append("")
     bottom = f"Student question: {question}"
@@ -163,6 +173,8 @@ def build_budgeted_prompt(
     chunks_used: List[int] = []
     for index, chunk in enumerate(chunks):
         location = chunk.source + (f", p. {chunk.page}" if chunk.page else "")
+        if chunk.topic:
+            location += f", from topic: {chunk.topic}"
         label = f"[{len(chunk_blocks) + 1}] ({location})\n"
         body = chunk.text
         trimmed = False
@@ -205,7 +217,8 @@ def build_user_prompt(
     gaps: List[PrerequisiteGap],
     history: Optional[List[dict]] = None,
     max_chars: Optional[int] = None,
+    from_other_topics: bool = False,
 ) -> str:
     return build_budgeted_prompt(
-        question, topic_name, depth, chunks, gaps, history, max_chars
+        question, topic_name, depth, chunks, gaps, history, max_chars, from_other_topics
     ).text

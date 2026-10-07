@@ -158,3 +158,30 @@ def test_many_gaps_are_capped_under_a_budget():
 
 def test_the_system_prompt_asks_for_a_focused_answer_that_fits_the_reply_cap():
     assert "250 words" in SYSTEM_PROMPT
+
+
+# --- passages from other topics ---------------------------------------------------------
+
+def test_a_passage_from_another_topic_is_labelled_with_it():
+    chunk = RetrievedContext("Hash notes", 7, "Chaining resolves collisions.", topic="Hashing")
+    text = build_user_prompt("Q?", "Sorting", "medium", [chunk], [])
+    assert "[1] (Hash notes, p. 7, from topic: Hashing)" in text
+
+
+def test_a_passage_from_the_current_topic_has_no_topic_label():
+    text = build_user_prompt("Q?", "T", "medium", [RetrievedContext("Notes", 1, "x")], [])
+    assert "from topic" not in text and "OTHER topics" not in text
+
+
+def test_the_other_topics_note_appears_only_when_asked_for():
+    chunk = RetrievedContext("Notes", None, "x", topic="Other")
+    with_note = build_user_prompt("Q?", "T", "medium", [chunk], [], from_other_topics=True)
+    without = build_user_prompt("Q?", "T", "medium", [chunk], [])
+    assert "OTHER topics of the same course" in with_note and "OTHER topics" not in without
+    assert with_note.index("OTHER topics") < with_note.index("Study material")
+
+
+def test_the_note_survives_a_tight_budget():
+    chunks = [RetrievedContext("N", None, "word " * 100, topic="Other")] * 3
+    built = build_budgeted_prompt("Q?", "T", "medium", chunks, [], max_chars=1500, from_other_topics=True)
+    assert "OTHER topics" in built.text and len(built.text) <= 1500

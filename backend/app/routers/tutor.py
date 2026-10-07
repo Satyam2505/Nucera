@@ -18,6 +18,7 @@ from app.services.tutor_service import (
     PreparedAnswer,
     TutorAnswer,
     answer_prepared,
+    is_relevant,
     prepare_tutor_answer,
     stream_tutor_answer,
 )
@@ -38,6 +39,10 @@ class _Turn:
     flagged_topics: List[models.Topic]
 
 
+# Chunks fetched when widening to the whole course (some belong to the topic already searched).
+COURSE_FALLBACK_CANDIDATES = 8
+
+
 def _recent_history(db: Session, topic_id: int) -> List[dict]:
     """The topic's last few saved messages, oldest first. Taken from the server,
     not from the request, so a client can't put words in the tutor's mouth."""
@@ -51,22 +56,48 @@ def _recent_history(db: Session, topic_id: int) -> List[dict]:
     return [{"role": row.role, "text": row.content} for row in reversed(rows)]
 
 
+def _chunk_dict(match: dict, with_topic: bool = False) -> dict:
+    chunk = {
+        "source": match["source"].title,
+        "page": match["chunk"].page_number,
+        "text": match["chunk"].chunk_text,
+        "similarity": match["similarity_score"],
+        "keyword_match": match["keyword_match"],
+        "rank": match["rank"],
+    }
+    if with_topic:
+        chunk["topic"] = match["chunk"].topic.name
+    return chunk
+
+
 def _prepare_turn(db: Session, payload: schemas.AskRequest, user: models.User) -> _Turn:
     topic = get_owned_topic(db, payload.topic_id, user)
 
-    # 1. RAG grounding — the top relevant chunks from this topic's material.
+    # 1. RAG grounding — the best passages from this topic's material.
     matches = retrieve_relevant_chunks(
         db, payload.query, user_id=user.id, topic_id=payload.topic_id, top_k=5
     )
-    retrieved_chunks = [
-        {
-            "source": match["source"].title,
-            "page": match["chunk"].page_number,
-            "text": match["chunk"].chunk_text,
-            "similarity": match["similarity_score"],
-        }
-        for match in matches
-    ]
+    retrieved_chunks = [_chunk_dict(match) for match in matches]
+
+    # If the topic's own material has nothing relevant, look at the rest of the
+    # course before giving up: the answer may be in another topic's notes. Those
+    # passages are labelled with their topic, so the answer and its citations say so.
+    from_other_topics = False
+    if not any(is_relevant(c) for c in retrieved_chunks):
+        wider = retrieve_relevant_chunks(
+            db,
+            payload.query,
+            user_id=user.id,
+            course_id=topic.module.course_id,
+            top_k=COURSE_FALLBACK_CANDIDATES,
+        )
+        elsewhere = [
+            _chunk_dict(match, with_topic=True)
+            for match in wider
+            if match["chunk"].topic_id != topic.id  # this topic was just searched
+        ][:5]
+        if any(is_relevant(c) for c in elsewhere):
+            retrieved_chunks, from_other_topics = elsewhere, True
 
     # 2. Adaptive guidance — prerequisite gaps, each paired with its actual
     # mastery score (graph_service only knows which topics are unmastered,
@@ -93,6 +124,7 @@ def _prepare_turn(db: Session, payload: schemas.AskRequest, user: models.User) -
         topic_mastery_score=topic_score,
         prerequisite_gaps=prerequisite_gaps,
         history=_recent_history(db, payload.topic_id),
+        from_other_topics=from_other_topics,
     )
     return _Turn(prepared=prepared, flagged_topics=flagged_topics)
 

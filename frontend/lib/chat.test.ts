@@ -121,7 +121,7 @@ await test("a done line carries the answer, citations, grounding and gaps", () =
     JSON.stringify({
       type: "done",
       answer: "Full answer",
-      sources: [{ source: "Notes", page: 3 }, { source: "Other", page: null }, { nope: 1 }],
+      sources: [{ source: "Notes", page: 3 }, { source: "Other", page: null, topic: "Hashing" }, { nope: 1 }],
       grounded: false,
       flagged_prerequisites: [{ id: 7, name: "Functions", extra: "ignored" }, "junk"],
     })
@@ -130,8 +130,8 @@ await test("a done line carries the answer, citations, grounding and gaps", () =
     type: "done",
     answer: "Full answer",
     sources: [
-      { source: "Notes", page: 3 },
-      { source: "Other", page: null },
+      { source: "Notes", page: 3, topic: null },
+      { source: "Other", page: null, topic: "Hashing" },
     ],
     grounded: false,
     flagged_prerequisites: [{ id: 7, name: "Functions" }],

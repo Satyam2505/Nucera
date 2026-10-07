@@ -147,6 +147,8 @@ export interface GraphData {
 export interface SourceCitation {
   source: string;
   page: number | null;
+  // Set when the passage came from another topic of the same course.
+  topic?: string | null;
 }
 
 // A question as shown before grading: no answer key and no explanation.

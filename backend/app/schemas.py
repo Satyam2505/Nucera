@@ -201,6 +201,9 @@ class SessionHistoryItem(BaseModel):
 class SourceCitation(BaseModel):
     source: str
     page: Optional[int] = None
+    # Set only when the passage came from another topic of the same course (the
+    # tutor widens its search when the topic's own material has nothing relevant).
+    topic: Optional[str] = None
 
 
 class QuizQuestionOut(BaseModel):
@@ -332,6 +335,8 @@ class RetrievedChunk(BaseModel):
     page_number: Optional[int] = None
     chunk_index: int
     similarity_score: float
+    # Contains every searchable word of the question (see retrieval_service).
+    keyword_match: bool = False
     chunk_text: str
 
 

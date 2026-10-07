@@ -717,10 +717,13 @@ def test_results_carry_the_key_the_choice_the_explanation_and_citations(client, 
     ok, bad = by_id[first], by_id[second]
     assert ok["is_correct"] is True and ok["chosen"] == ok["correct_option"] == quiz["keys"][first]
     assert ok["explanation"] == "Explanation of fact 1."
-    assert ok["sources"] == [{"source": "Notes A", "page": 3}]
+    assert ok["sources"] == [{"source": "Notes A", "page": 3, "topic": None}]
     assert bad["is_correct"] is False and bad["chosen"] == wrong_option(quiz["keys"][second])
     assert bad["correct_option"] == quiz["keys"][second]
-    assert bad["sources"] == [{"source": "Notes A", "page": 3}, {"source": "Notes B", "page": None}]
+    assert bad["sources"] == [
+        {"source": "Notes A", "page": 3, "topic": None},
+        {"source": "Notes B", "page": None, "topic": None},
+    ]
     assert sorted(bad["options"]) == ["A", "B", "C", "D"]
 
 

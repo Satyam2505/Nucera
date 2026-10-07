@@ -85,7 +85,7 @@ def test_an_answered_question_is_saved_as_two_messages_in_order(client, topic, b
     assert messages[0]["content"] == QUESTION
     assert messages[1]["content"] == "Hash functions map keys to bucket indexes."
     assert messages[1]["grounded"] is True
-    assert messages[1]["sources"] == [{"source": "Hash notes", "page": None}]
+    assert messages[1]["sources"] == [{"source": "Hash notes", "page": None, "topic": None}]
     assert messages[1]["flagged"] == []
     assert messages[0]["id"] < messages[1]["id"] and messages[1]["created_at"]
 

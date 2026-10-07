@@ -26,7 +26,13 @@ function citations(value: unknown): SourceCitation[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) =>
     isObject(item) && typeof item.source === "string"
-      ? [{ source: item.source, page: typeof item.page === "number" ? item.page : null }]
+      ? [
+          {
+            source: item.source,
+            page: typeof item.page === "number" ? item.page : null,
+            topic: typeof item.topic === "string" && item.topic ? item.topic : null,
+          },
+        ]
       : []
   );
 }

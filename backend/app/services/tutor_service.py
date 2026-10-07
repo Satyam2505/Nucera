@@ -72,6 +72,13 @@ def explanation_depth_for_score(score: int) -> str:
     return "low"
 
 
+def is_relevant(chunk: dict) -> bool:
+    """Whether a retrieved chunk is evidence for the question: its cosine similarity
+    clears the threshold, or it contains every searchable word of the question (a
+    precise match the embedding can miss, such as an acronym)."""
+    return chunk["similarity"] >= RETRIEVAL_RELEVANCE_THRESHOLD or bool(chunk.get("keyword_match"))
+
+
 def prepare_tutor_answer(
     question: str,
     retrieved_chunks: List[dict],
@@ -79,10 +86,14 @@ def prepare_tutor_answer(
     topic_mastery_score: int,
     prerequisite_gaps: List[dict],
     history: Optional[List[dict]] = None,
+    from_other_topics: bool = False,
 ) -> PreparedAnswer:
     """
     retrieved_chunks: ranked list (best first) of
-        {"source": str, "page": Optional[int], "text": str, "similarity": float}
+        {"source": str, "page": Optional[int], "text": str, "similarity": float,
+         optional "keyword_match": bool, "rank": int, "topic": str}
+    from_other_topics: the chunks come from other topics of the course (the topic's
+        own material had nothing relevant); each then carries its "topic" name.
     prerequisite_gaps: list of {"name": str, "score": int}
     history: optional list of {"role": "user"|"assistant", "text": str},
         oldest first — only the last few turns are used.
@@ -91,10 +102,10 @@ def prepare_tutor_answer(
     # are used at all. If none do, the LLM is not called. Weaker chunks that
     # merely came back in the top few are neither shown to the model (they
     # would only invite it to build on irrelevant text) nor cited.
+    # Best first: by the retrieval's merged ranking when it gave one, else by similarity.
     relevant = sorted(
-        (c for c in retrieved_chunks if c["similarity"] >= RETRIEVAL_RELEVANCE_THRESHOLD),
-        key=lambda c: c["similarity"],
-        reverse=True,
+        (c for c in retrieved_chunks if is_relevant(c)),
+        key=lambda c: (c.get("rank", 10**9), -c["similarity"]),
     )
     if not relevant:
         return PreparedAnswer(
@@ -104,7 +115,9 @@ def prepare_tutor_answer(
     depth = explanation_depth_for_score(topic_mastery_score)
 
     context_chunks = [
-        RetrievedContext(source=c["source"], page=c.get("page"), text=c["text"])
+        RetrievedContext(
+            source=c["source"], page=c.get("page"), text=c["text"], topic=c.get("topic")
+        )
         for c in relevant
     ]
     gaps = [PrerequisiteGap(name=g["name"], score=g["score"]) for g in prerequisite_gaps]
@@ -119,15 +132,18 @@ def prepare_tutor_answer(
         gaps=gaps,
         history=history,
         max_chars=user_prompt_char_budget(SYSTEM_PROMPT, OLLAMA_MAX_OUTPUT_TOKENS),
+        from_other_topics=from_other_topics,
     )
 
     # Citations are built from the chunks the model will actually be shown,
     # never from whatever the model happens to say — so a citation can't be
     # fabricated, and a chunk dropped for lack of room isn't cited.
-    sources = [
-        {"source": relevant[i]["source"], "page": relevant[i].get("page")}
-        for i in built.chunks_used
-    ]
+    sources = []
+    for i in built.chunks_used:
+        citation = {"source": relevant[i]["source"], "page": relevant[i].get("page")}
+        if relevant[i].get("topic"):
+            citation["topic"] = relevant[i]["topic"]
+        sources.append(citation)
     return PreparedAnswer(system_prompt=SYSTEM_PROMPT, user_prompt=built.text, sources=sources)
 
 
@@ -158,9 +174,16 @@ def generate_tutor_answer(
     topic_mastery_score: int,
     prerequisite_gaps: List[dict],
     history: Optional[List[dict]] = None,
+    from_other_topics: bool = False,
 ) -> TutorAnswer:
     prepared = prepare_tutor_answer(
-        question, retrieved_chunks, topic_name, topic_mastery_score, prerequisite_gaps, history
+        question,
+        retrieved_chunks,
+        topic_name,
+        topic_mastery_score,
+        prerequisite_gaps,
+        history,
+        from_other_topics,
     )
     return answer_prepared(prepared)
 
