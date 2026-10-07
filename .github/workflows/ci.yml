@@ -1,0 +1,94 @@
+name: CI
+
+# Runs on every pull request and on pushes to main. Everything runs on GitHub's own
+# runners: no secrets are needed and the model is never contacted (the tests replace it).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      # sentence-transformers needs torch. The default Linux wheel bundles CUDA (several
+      # GB), which a CPU-only runner never uses, so install the CPU build first and let
+      # requirements.txt find it already satisfied.
+      - name: Install torch (CPU build)
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Dependencies are consistent
+        run: pip check
+
+      # The test suite loads the real embedding model (all-MiniLM-L6-v2), about 90 MB.
+      - name: Cache the embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-all-MiniLM-L6-v2
+
+      - name: Migrations apply to an empty database and undo cleanly
+        env:
+          DATABASE_URL: sqlite:///ci-migration-check.db
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+
+      - name: Tests
+        run: pytest -q
+
+  frontend:
+    name: Frontend (types, tests, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Unit tests (lib/*.test.ts)
+        run: npm test
+
+      - name: Production build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+        run: npm run build
