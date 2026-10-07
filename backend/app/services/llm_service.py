@@ -11,9 +11,11 @@ timeout, malformed response) comes back as LLMResult(ok=False, error=...)
 so the caller can degrade gracefully instead of crashing.
 """
 
+import json
 import logging
+import threading
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterator, List, Optional, Tuple, Union
 
 import requests
 
@@ -36,6 +38,10 @@ logger = logging.getLogger(__name__)
 # sending (see _warn_if_over_budget).
 _NEAR_FULL_WINDOW = 0.98
 
+# Seconds to wait for the connection when streaming; the read timeout is
+# OLLAMA_TIMEOUT_SECONDS.
+_CONNECT_TIMEOUT = 10
+
 
 @dataclass
 class LLMResult:
@@ -47,6 +53,43 @@ class LLMResult:
     # True when the reply stopped because it hit the output cap, not because
     # the model finished.
     hit_output_limit: bool = False
+
+
+class StreamAbort:
+    """Lets another thread stop a generate_stream() that is blocked waiting for
+    the model: closing the connection to Ollama makes it stop generating (which
+    matters on a CPU, where an unwanted answer is minutes of work).
+
+    The connection can only be closed once Ollama has sent its response headers,
+    which for a streamed chat is about when the prompt has been read; an abort
+    before that takes effect at that point.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._response = None
+        self._aborted = False
+
+    @property
+    def aborted(self) -> bool:
+        return self._aborted
+
+    def attach(self, response) -> None:
+        with self._lock:
+            self._response = response
+            aborted = self._aborted
+        if aborted:
+            response.close()
+
+    def abort(self) -> None:
+        with self._lock:
+            self._aborted = True
+            response = self._response
+        if response is not None:
+            try:
+                response.close()
+            except Exception:  # closing is best effort; there is nothing to recover
+                logger.debug("Closing the model connection failed", exc_info=True)
 
 
 def _warn_if_over_budget(system_prompt: str, user_prompt: str, output_tokens: int) -> None:
@@ -65,6 +108,68 @@ def _warn_if_over_budget(system_prompt: str, user_prompt: str, output_tokens: in
             OLLAMA_NUM_CTX,
             output_tokens,
         )
+
+
+def _build_payload(
+    system_prompt: str,
+    user_prompt: str,
+    model_name: str,
+    stream: bool,
+    json_mode: bool,
+    temperature: Optional[float],
+    output_tokens: int,
+) -> dict:
+    payload = {
+        "model": model_name,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "stream": stream,
+        "options": {
+            "num_ctx": OLLAMA_NUM_CTX,
+            "temperature": OLLAMA_TEMPERATURE if temperature is None else temperature,
+            "num_predict": output_tokens,
+        },
+    }
+    if json_mode:
+        payload["format"] = "json"
+    return payload
+
+
+def _request_error(exc: requests.exceptions.RequestException) -> str:
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        return "Ollama is not running or unreachable."
+    if isinstance(exc, requests.exceptions.Timeout):
+        return "The local model timed out."
+    return f"Request to the local model failed: {exc}"
+
+
+def _status_error(response, model_name: str) -> Optional[str]:
+    if response.status_code == 404:
+        return f"Model '{model_name}' is not pulled in Ollama."
+    if not response.ok:
+        return f"Ollama returned HTTP {response.status_code}."
+    return None
+
+
+def _note_stats(data: dict) -> Tuple[Optional[int], bool]:
+    """(prompt tokens, hit the output cap) from Ollama's final message, with the
+    matching log warnings."""
+    prompt_tokens = data.get("prompt_eval_count")
+    if not isinstance(prompt_tokens, int):
+        prompt_tokens = None
+    if prompt_tokens is not None and prompt_tokens >= OLLAMA_NUM_CTX * _NEAR_FULL_WINDOW:
+        logger.warning(
+            "Ollama processed %d prompt tokens against a %d-token window: the prompt "
+            "was probably truncated. Lower the prompt size or raise OLLAMA_NUM_CTX.",
+            prompt_tokens,
+            OLLAMA_NUM_CTX,
+        )
+    hit_limit = data.get("done_reason") == "length"
+    if hit_limit:
+        logger.warning("The local model's reply was cut off at the output token limit.")
+    return prompt_tokens, hit_limit
 
 
 def generate(
@@ -87,22 +192,9 @@ def generate(
     model_name = model or OLLAMA_MODEL
     output_tokens = OLLAMA_MAX_OUTPUT_TOKENS if max_output_tokens is None else max_output_tokens
     _warn_if_over_budget(system_prompt, user_prompt, output_tokens)
-
-    payload = {
-        "model": model_name,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "stream": False,
-        "options": {
-            "num_ctx": OLLAMA_NUM_CTX,
-            "temperature": OLLAMA_TEMPERATURE if temperature is None else temperature,
-            "num_predict": output_tokens,
-        },
-    }
-    if json_mode:
-        payload["format"] = "json"
+    payload = _build_payload(
+        system_prompt, user_prompt, model_name, False, json_mode, temperature, output_tokens
+    )
 
     try:
         response = requests.post(
@@ -110,17 +202,12 @@ def generate(
             json=payload,
             timeout=timeout if timeout is not None else OLLAMA_TIMEOUT_SECONDS,
         )
-    except requests.exceptions.ConnectionError:
-        return LLMResult(ok=False, error="Ollama is not running or unreachable.")
-    except requests.exceptions.Timeout:
-        return LLMResult(ok=False, error="The local model timed out.")
     except requests.exceptions.RequestException as exc:
-        return LLMResult(ok=False, error=f"Request to the local model failed: {exc}")
+        return LLMResult(ok=False, error=_request_error(exc))
 
-    if response.status_code == 404:
-        return LLMResult(ok=False, error=f"Model '{model_name}' is not pulled in Ollama.")
-    if not response.ok:
-        return LLMResult(ok=False, error=f"Ollama returned HTTP {response.status_code}.")
+    error = _status_error(response, model_name)
+    if error:
+        return LLMResult(ok=False, error=error)
 
     try:
         data = response.json()
@@ -131,20 +218,101 @@ def generate(
     if not text or not text.strip():
         return LLMResult(ok=False, error="The local model returned an empty response.")
 
-    prompt_tokens = data.get("prompt_eval_count")
-    if not isinstance(prompt_tokens, int):
-        prompt_tokens = None
-    if prompt_tokens is not None and prompt_tokens >= OLLAMA_NUM_CTX * _NEAR_FULL_WINDOW:
-        logger.warning(
-            "Ollama processed %d prompt tokens against a %d-token window: the prompt "
-            "was probably truncated. Lower the prompt size or raise OLLAMA_NUM_CTX.",
-            prompt_tokens,
-            OLLAMA_NUM_CTX,
-        )
-    hit_limit = data.get("done_reason") == "length"
-    if hit_limit:
-        logger.warning("The local model's reply was cut off at the output token limit.")
-
+    prompt_tokens, hit_limit = _note_stats(data)
     return LLMResult(
         ok=True, text=text.strip(), prompt_tokens=prompt_tokens, hit_output_limit=hit_limit
+    )
+
+
+def generate_stream(
+    system_prompt: str,
+    user_prompt: str,
+    model: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_output_tokens: Optional[int] = None,
+    abort: Optional[StreamAbort] = None,
+) -> Iterator[Tuple[str, Union[str, LLMResult]]]:
+    """Like generate(), but yields ("token", text) as the model writes and ends
+    with exactly one ("end", LLMResult). Never raises.
+
+    The result's text is everything streamed. If the connection drops part-way
+    the result has ok=False with the partial text and the reason, so the caller
+    can keep what arrived. Here OLLAMA_TIMEOUT_SECONDS bounds the wait for each
+    piece (the first one is slow: it follows reading the whole prompt), not the
+    whole answer, so a long answer that keeps flowing never times out.
+    Closing the generator early closes the connection, which stops Ollama; so
+    does `abort.abort()` from another thread, in which case the result is an
+    ok=False "stopped" with whatever had arrived.
+    """
+    model_name = model or OLLAMA_MODEL
+    output_tokens = OLLAMA_MAX_OUTPUT_TOKENS if max_output_tokens is None else max_output_tokens
+    _warn_if_over_budget(system_prompt, user_prompt, output_tokens)
+    payload = _build_payload(
+        system_prompt, user_prompt, model_name, True, False, temperature, output_tokens
+    )
+
+    try:
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/chat",
+            json=payload,
+            timeout=(_CONNECT_TIMEOUT, OLLAMA_TIMEOUT_SECONDS),
+            stream=True,
+        )
+    except requests.exceptions.RequestException as exc:
+        yield "end", LLMResult(ok=False, error=_request_error(exc))
+        return
+
+    if abort is not None:
+        abort.attach(response)
+
+    parts: List[str] = []
+    error: Optional[str] = _status_error(response, model_name)
+    final: dict = {}
+    try:
+        if error is None:
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                except ValueError:
+                    error = "Ollama returned a malformed response."
+                    break
+                if not isinstance(data, dict):
+                    error = "Ollama returned a malformed response."
+                    break
+                if data.get("error"):
+                    error = f"The local model reported an error: {data['error']}"
+                    break
+                message = data.get("message")
+                piece = message.get("content") if isinstance(message, dict) else None
+                if piece:
+                    parts.append(piece)
+                    yield "token", piece
+                if data.get("done"):
+                    final = data
+                    break
+            else:
+                if not final:
+                    error = "The connection to the local model closed before the answer finished."
+    except (requests.exceptions.RequestException, OSError, ValueError) as exc:
+        # An abort closes the connection under the read, which surfaces as one of these.
+        error = "Stopped." if abort is not None and abort.aborted else (
+            _request_error(exc) if isinstance(exc, requests.exceptions.RequestException) else str(exc)
+        )
+    finally:
+        response.close()
+
+    if abort is not None and abort.aborted and not final:
+        error = "Stopped."
+    text = "".join(parts)
+    if error is None and not text.strip():
+        error = "The local model returned an empty response."
+    prompt_tokens, hit_limit = _note_stats(final) if final else (None, False)
+    yield "end", LLMResult(
+        ok=error is None,
+        text=text.strip(),
+        error=error,
+        prompt_tokens=prompt_tokens,
+        hit_output_limit=hit_limit,
     )
