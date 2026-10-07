@@ -9,8 +9,8 @@ from app.config import UPLOAD_MAX_BYTES
 from app.database import get_db
 from app.deps import get_current_user
 from app.ownership import get_owned_source, get_owned_topic
-from app.services.chunking import chunk_pages
 from app.services.embedding_service import embed_texts
+from app.services.indexing import chunk_for_embedding
 from app.services.text_extraction import UploadRejected, check_extension, extract_pages
 
 logger = logging.getLogger(__name__)
@@ -40,15 +40,14 @@ def _ingest_pages(
 ) -> models.Source:
     """Chunk and embed first, then write the source and all its chunks in one
     transaction, so a failure part-way never leaves a source without chunks."""
-    pieces = chunk_pages(pages)
-    if not pieces:
-        raise HTTPException(status_code=422, detail="There is no text to add.")
-
     try:
-        embeddings = embed_texts([piece.text for piece in pieces])
+        pieces = chunk_for_embedding(pages)
+        embeddings = embed_texts([piece.text for piece in pieces]) if pieces else []
     except Exception:
         logger.exception("Embedding failed while ingesting %r", title)
         raise HTTPException(status_code=503, detail=EMBEDDING_FAILED_MESSAGE)
+    if not pieces:
+        raise HTTPException(status_code=422, detail="There is no text to add.")
     if len(embeddings) != len(pieces):
         raise HTTPException(status_code=503, detail=EMBEDDING_FAILED_MESSAGE)
 

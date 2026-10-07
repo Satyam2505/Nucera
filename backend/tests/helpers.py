@@ -33,3 +33,24 @@ def make_topic(client, name, course="Test Course", module="Module 1", descriptio
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
+
+
+_SENTENCE_TEMPLATES = [
+    "A hash table maps key number {n} to a bucket by applying a hash function to it.",
+    "When two keys such as {n} and {m} land in the same bucket, the table must resolve the collision.",
+    "Chaining keeps a linked list of entries in each bucket, so lookup number {n} walks that list.",
+    "Open addressing instead probes other slots, and the load factor {n} percent controls how often it must.",
+    "Resizing the table to {m} buckets rehashes every stored key, which is why it is done rarely.",
+    "The average cost of an insertion stays constant while the worst case degrades to linear time.",
+]
+
+
+def distinct_prose(sentences: int) -> str:
+    """Prose of `sentences` sentences, none identical to another (each carries its
+    own numbers), in paragraphs of five. Deterministic."""
+    out = []
+    for i in range(sentences):
+        template = _SENTENCE_TEMPLATES[i % len(_SENTENCE_TEMPLATES)]
+        out.append(template.format(n=i, m=i * 7 + 3))
+    paragraphs = [" ".join(out[j : j + 5]) for j in range(0, len(out), 5)]
+    return "\n\n".join(paragraphs)

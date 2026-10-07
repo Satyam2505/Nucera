@@ -7,7 +7,7 @@ model can be swapped later (a bigger one, a different family) by editing
 this file alone.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_DIM = 384  # all-MiniLM-L6-v2's native output size
@@ -22,6 +22,22 @@ def _get_model():
 
         _model = SentenceTransformer(MODEL_NAME, device="cpu")
     return _model
+
+
+def max_input_tokens() -> int:
+    """How many tokens the model reads per text; anything past this is silently
+    dropped when embedding, so chunks must fit (see chunking.fit_to_token_limit).
+    """
+    return int(_get_model().max_seq_length)
+
+
+def count_tokens(texts: Sequence[str]) -> List[int]:
+    """Tokens each text takes for this model, including its start/end markers,
+    i.e. the number that is compared with max_input_tokens()."""
+    if not texts:
+        return []
+    encoded = _get_model().tokenizer(list(texts), truncation=False, verbose=False)
+    return [len(ids) for ids in encoded["input_ids"]]
 
 
 def embed_texts(texts: List[str]) -> List[List[float]]:

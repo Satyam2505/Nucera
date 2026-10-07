@@ -1,4 +1,13 @@
-from app.services.chunking import _overlap_tail, _split_long_sentence, chunk_pages, chunk_text
+from app.services import chunking
+from app.services.chunking import (
+    _overlap_tail,
+    _split_long_sentence,
+    chunk_pages,
+    chunk_text,
+    fit_to_token_limit,
+)
+from app.services.embedding_service import count_tokens, max_input_tokens
+from helpers import distinct_prose
 
 
 def test_chunk_text_respects_max_chars():
@@ -115,3 +124,100 @@ def test_split_long_sentence_always_makes_progress():
     pieces = _split_long_sentence(" " * 5 + "x" * 25, 10)
     assert pieces and all(0 < len(p) <= 10 for p in pieces)
     assert "".join(pieces) == "x" * 25
+
+
+# --- fitting the embedding model's input limit --------------------------------------------
+
+# The chunk size in effect before the embedding input limit was taken into account.
+OLD_MAX_CHARS, OLD_OVERLAP_CHARS = 2600, 390
+
+
+def test_default_chunks_target_well_inside_the_embedders_input_limit():
+    assert chunking.TARGET_TOKENS <= 0.8 * max_input_tokens()
+    assert chunking.MAX_CHARS == chunking.TARGET_TOKENS * chunking.CHARS_PER_TOKEN
+
+
+def words_as_tokens(texts):
+    return [len(t.split()) for t in texts]
+
+
+def test_fit_leaves_chunks_that_already_fit_untouched():
+    chunks = ["a b c", "d e f g"]
+    assert fit_to_token_limit(chunks, words_as_tokens, max_tokens=10) == chunks
+
+
+def test_fit_splits_an_overlong_chunk_until_every_piece_fits_and_loses_no_words():
+    words = [f"w{i}" for i in range(500)]
+    sentence_text = ". ".join(" ".join(words[i : i + 10]) for i in range(0, 500, 10)) + "."
+    fitted = fit_to_token_limit(["short one", sentence_text], words_as_tokens, max_tokens=60)
+    assert fitted[0] == "short one"
+    assert len(fitted) > 3
+    assert all(words_as_tokens([c])[0] <= 60 for c in fitted)
+    rejoined = " ".join(fitted).replace(".", "").split()
+    assert set(words) <= set(rejoined)  # overlap may repeat words, but none is lost
+
+
+def test_fit_always_terminates_even_if_nothing_can_be_small_enough():
+    stubborn = lambda texts: [10_000 for _ in texts]  # every text "has" 10000 tokens
+    out = fit_to_token_limit(["some words here that cannot get small enough " * 5], stubborn, max_tokens=5)
+    assert out  # gave up and kept the text rather than looping or dropping it
+
+
+def test_fit_handles_no_chunks():
+    assert fit_to_token_limit([], words_as_tokens, 10) == []
+
+
+def test_chunk_pages_enforces_the_token_limit_when_given_a_counter():
+    page = "word " * 400  # 2000 chars, one 400-token sentence under the fake counter
+    plain = chunk_pages([(1, page)], max_chars=2000, overlap_chars=0)
+    assert max(words_as_tokens([p.text for p in plain])) > 50
+    fitted = chunk_pages(
+        [(1, page)], max_chars=2000, overlap_chars=0, token_counter=words_as_tokens, max_tokens=50
+    )
+    assert max(words_as_tokens([p.text for p in fitted])) <= 50
+    assert {p.page_number for p in fitted} == {1}
+    assert [p.chunk_index for p in fitted] == list(range(len(fitted)))
+
+
+def test_prose_chunks_fit_the_real_embedding_model():
+    pieces = chunk_pages([(1, distinct_prose(200))])
+    counts = count_tokens([p.text for p in pieces])
+    assert len(pieces) > 5
+    assert max(counts) <= max_input_tokens()
+
+
+def test_the_old_chunk_size_overflowed_the_embedder_which_is_the_bug_being_fixed():
+    pages = [(1, distinct_prose(200))]
+    old = chunk_pages(pages, max_chars=OLD_MAX_CHARS, overlap_chars=OLD_OVERLAP_CHARS)
+    counts = count_tokens([p.text for p in old])
+    limit = max_input_tokens()
+    assert max(counts) > limit
+    visible = sum(min(c, limit) for c in counts) / sum(counts)
+    assert visible < 0.6  # most of each old chunk was invisible to search
+
+
+DENSE_TEXTS = {
+    "maths": " ".join(
+        f"Let $x_{i} = \\frac{{{i}}}{{{i + 1}}} \\sum_{{k=0}}^{{{i}}} a_k^{{{i}}}$." for i in range(120)
+    ),
+    "code": "\n".join(f"for (int i{n} = 0; i{n} < n; i{n}++) {{ a[i{n}] += b[i{n}] * c[{n}]; }}" for n in range(120)),
+    "digits": ", ".join(str(1000003 * n) for n in range(300)) + ".",
+}
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("kind", sorted(DENSE_TEXTS))
+def test_text_that_tokenizes_badly_still_fits_the_real_embedding_model(kind):
+    """Maths, code and long numbers pack many more tokens into each character
+    than prose; the character budget alone would overflow, so the token pass
+    has to split them further."""
+    text = DENSE_TEXTS[kind]
+    chars_only = chunk_pages([(1, text)])
+    assert max(count_tokens([p.text for p in chars_only])) > max_input_tokens(), (
+        f"{kind} was supposed to overflow on characters alone; make the sample denser"
+    )
+
+    pieces = chunk_pages([(1, text)], token_counter=count_tokens, max_tokens=max_input_tokens())
+    assert max(count_tokens([p.text for p in pieces])) <= max_input_tokens()

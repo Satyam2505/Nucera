@@ -199,3 +199,27 @@ def test_ask_endpoint_uses_real_retrieval_and_still_flags_prerequisites(client, 
     # the existing prerequisite/mastery logic still works end to end.
     flagged_names = [t["name"] for t in body["flagged_prerequisites"]]
     assert "Sets" in flagged_names  # existing prerequisite/mastery logic still works
+
+
+def test_uploaded_text_is_chunked_to_fit_the_embedding_model(client, db_session):
+    """Every stored chunk fits the model's input limit, so none of it is silently
+    dropped when the chunk is embedded for search."""
+    from app import models
+    from app.services.embedding_service import count_tokens, max_input_tokens
+    from helpers import distinct_prose, make_topic
+
+    topic_id = make_topic(client, "Fit check", course="Test")["id"]
+    resp = client.post(
+        "/sources/text",
+        json={
+            "topic_id": topic_id,
+            "source_type": "self_supplied",
+            "title": "Long notes",
+            "text": distinct_prose(200),
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    chunks = db_session.query(models.Chunk).filter(models.Chunk.topic_id == topic_id).all()
+    assert len(chunks) > 5
+    assert max(count_tokens([c.chunk_text for c in chunks])) <= max_input_tokens()
