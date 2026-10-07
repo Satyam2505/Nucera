@@ -121,6 +121,23 @@ export interface Mastery {
   status: "unmastered" | "in_progress" | "mastered" | "missed";
   last_updated: string;
   flagged_for_revision: boolean;
+  // When the topic was last reviewed (a graded quiz or a typed score); null if never.
+  last_reviewed_at: string | null;
+  // Learned, but faded enough that it is time to review.
+  due_for_review: boolean;
+}
+
+// One suggestion for what to study next. "review": learned but faded, due now. "ready": not
+// mastered, every prerequisite mastered.
+export interface NextStep {
+  topic_id: number;
+  topic_name: string;
+  module_name: string;
+  kind: "review" | "ready";
+  reason: string;
+  score: number;
+  status: Mastery["status"];
+  due_for_review: boolean;
 }
 
 export interface GraphNode {
@@ -323,6 +340,8 @@ export const api = {
   removePrerequisite: (topicId: number, prerequisiteTopicId: number) =>
     request<void>(`/topics/${topicId}/prerequisites/${prerequisiteTopicId}`, { method: "DELETE" }),
   listMastery: () => request<Mastery[]>("/mastery"),
+  getNextSteps: (courseId: number, limit = 3) =>
+    request<NextStep[]>(`/courses/${courseId}/next?limit=${limit}`),
   markMissed: (topicId: number) =>
     request<Mastery>(`/mastery/${topicId}/missed`, { method: "POST" }),
   toggleRevision: (topicId: number) =>

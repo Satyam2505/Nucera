@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { CourseTree } from "@/lib/api";
+import { api, type CourseTree, type NextStep } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
+import { fadingNote, stepAction, stepBadge } from "@/lib/next-steps";
 import { STATUS_COLOR, STATUS_LABEL, type MasteryStatusKey } from "@/lib/status-colors";
 
 const ORDER: MasteryStatusKey[] = ["mastered", "in_progress", "unmastered", "missed"];
@@ -17,6 +19,8 @@ interface Entry {
   topic: { id: number; name: string };
   score: number;
   status: MasteryStatusKey;
+  // Learned but faded: time to review.
+  note: string | null;
 }
 
 interface ModuleEntries {
@@ -26,7 +30,13 @@ interface ModuleEntries {
   avgScore: number;
 }
 
-export default function MasteryView({ tree }: { tree: CourseTree }) {
+export default function MasteryView({
+  tree,
+  onOpenTopic,
+}: {
+  tree: CourseTree;
+  onOpenTopic?: (topicId: number, view: "chat" | "quiz") => void;
+}) {
   const { masteryByTopic } = useAppState();
   const [expanded, setExpanded] = useState(false);
 
@@ -41,6 +51,7 @@ export default function MasteryView({ tree }: { tree: CourseTree }) {
             topic,
             score: mastery?.score ?? topic.score,
             status: (mastery?.status ?? topic.status) as MasteryStatusKey,
+            note: fadingNote(mastery),
           };
         });
         const avgScore = entries.length
@@ -77,6 +88,8 @@ export default function MasteryView({ tree }: { tree: CourseTree }) {
 
   return (
     <div className="p-8 flex flex-col items-center gap-8">
+      <UpNext courseId={tree.id} refreshKey={masteryByTopic} onOpenTopic={onOpenTopic} />
+
       <button
         onClick={() => setExpanded((v) => !v)}
         className="relative group focus:outline-none"
@@ -178,7 +191,7 @@ function ModuleCard({ index, module }: { index: number; module: ModuleEntries })
             <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${module.avgScore}%` }} />
           </div>
           <ul className="mt-3 space-y-1.5">
-            {module.entries.map(({ topic, score, status }) => (
+            {module.entries.map(({ topic, score, status, note }) => (
               <li key={topic.id} className="flex items-center justify-between gap-3 text-sm text-[var(--ink)]">
                 <span className="flex items-center gap-2 min-w-0">
                   <span
@@ -189,6 +202,7 @@ function ModuleCard({ index, module }: { index: number; module: ModuleEntries })
                   <span className="truncate">{topic.name}</span>
                 </span>
                 <span className="text-xs text-stone-500 dark:text-stone-400 shrink-0">
+                  {note && <span className="mr-2 text-[var(--warn-text)]">{note}</span>}
                   {STATUS_LABEL[status]} · {score}
                 </span>
               </li>
@@ -226,5 +240,89 @@ function BreakdownList({
         ))}
       </ul>
     </Card>
+  );
+}
+
+// What to study next, from the course's prerequisites and how much has faded. Reloaded
+// whenever mastery changes (a quiz was graded), so it never suggests what was just done.
+function UpNext({
+  courseId,
+  refreshKey,
+  onOpenTopic,
+}: {
+  courseId: number;
+  refreshKey: unknown;
+  onOpenTopic?: (topicId: number, view: "chat" | "quiz") => void;
+}) {
+  const [steps, setSteps] = useState<NextStep[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setError(null);
+    api
+      .getNextSteps(courseId)
+      .then((result) => {
+        if (!cancelled) setSteps(result);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Couldn't load suggestions.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId, refreshKey]);
+
+  if (error) return <p className="text-xs text-[var(--error-text)]">{error}</p>;
+  if (steps === null) return null;
+
+  return (
+    <section aria-label="What to study next" className="w-full max-w-3xl space-y-2">
+      <h2 className="text-sm font-semibold text-[var(--ink)]">What to study next</h2>
+      {steps.length === 0 ? (
+        <p className="text-sm text-stone-600 dark:text-stone-300">
+          Everything here is mastered and up to date. Nothing needs review right now.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {steps.map((step) => {
+            const action = stepAction(step);
+            return (
+              <li key={step.topic_id}>
+                <Card className="surface rounded-2xl p-4 border-[rgba(var(--ink-rgb),0.09)] flex-row items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[var(--ink)] truncate">
+                      <span
+                        className={`mr-2 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                          step.kind === "review"
+                            ? "bg-[var(--warn-bg)] text-[var(--warn-text)]"
+                            : "bg-[rgba(var(--accent-rgb),0.12)] text-[var(--accent-hover)]"
+                        }`}
+                      >
+                        {stepBadge(step)}
+                      </span>
+                      {step.topic_name}
+                    </p>
+                    <p className="text-xs text-stone-600 dark:text-stone-300">
+                      {step.reason} · {step.module_name}
+                    </p>
+                  </div>
+                  {onOpenTopic && (
+                    <Button
+                      size="sm"
+                      variant={step.kind === "review" ? "default" : "outline"}
+                      onClick={() => onOpenTopic(step.topic_id, action.view)}
+                      className="shrink-0"
+                    >
+                      {action.label}
+                    </Button>
+                  )}
+                </Card>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }

@@ -247,7 +247,15 @@ export default function CourseWorkspace() {
                     }}
                   />
                 )}
-                {view === "mastery" && <MasteryView tree={tree} />}
+                {view === "mastery" && (
+                  <MasteryView
+                    tree={tree}
+                    onOpenTopic={(topicId, target) => {
+                      setSelectedTopicId(topicId);
+                      setView(target);
+                    }}
+                  />
+                )}
                 {view === "history" && <HistoryView tree={tree} />}
                 {view === "sources" && (
                   <SourcesView
