@@ -86,6 +86,7 @@ ROUTES = [
     ("sessions-by-topic", "get", lambda w: f"/sessions?topic_id={w['topic']}", lambda w: {}),
     ("sessions-by-course", "get", lambda w: f"/sessions?course_id={w['course']}", lambda w: {}),
     ("remove-prerequisite", "delete", lambda w: f"/topics/{w['topic']}/prerequisites/{w['topic']}", lambda w: {}),
+    ("study-next", "get", lambda w: f"/courses/{w['course']}/next", lambda w: {}),
     ("get-chat", "get", lambda w: f"/chat/{w['topic']}", lambda w: {}),
     ("clear-chat", "delete", lambda w: f"/chat/{w['topic']}", lambda w: {}),
     (

@@ -1,13 +1,13 @@
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 
 from app import models, schemas
 from app.database import get_db
 from app.deps import get_current_user
 from app.ownership import get_owned_course, get_owned_module
-from app.services import ordering
+from app.services import ordering, study_next
 
 router = APIRouter(tags=["courses"])
 
@@ -248,3 +248,17 @@ def reorder_topics(
     course_id = module.course_id
     db.commit()
     return _to_tree(_course_with_tree(db, course_id))
+
+
+@router.get("/courses/{course_id}/next", response_model=List[schemas.NextStepOut])
+def what_to_study_next(
+    course_id: int,
+    limit: int = Query(default=3, ge=1, le=10),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """What to study next in the course, best first, each with the reason: topics due for
+    review (learned but faded) first, then topics that are ready (not mastered, every
+    prerequisite mastered). An empty list means everything is mastered and up to date."""
+    get_owned_course(db, course_id, current_user)
+    return study_next.next_steps(db, current_user.id, course_id, limit)
