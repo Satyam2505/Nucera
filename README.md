@@ -34,7 +34,9 @@ served by [Ollama](https://ollama.com).
   "missed" is set manually and cleared by the next improvement. Revision list
   for topics you want to revisit.
 - **Knowledge graph** — interactive prerequisite graph per course, tinted and
-  filterable by module.
+  filterable by module. Prerequisites are added and removed from a topic's panel in
+  the graph; a link that would make a loop (A needs B needs A, or any longer circle)
+  is refused with the chain shown.
 
 ## Stack
 

@@ -44,7 +44,7 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
 | 1 Retrieval and prompt correctness | `feat/phase-1-retrieval-prompts` | done, awaiting your manual check |
 | 2 Tutor experience (streaming, markdown, saved chats) | `feat/phase-2-tutor-experience` (on top of phase 1) | done, awaiting your manual check |
 | 3 Quizzes (background jobs, DB guard, history screens) | `feat/phase-3-quizzes` (on top of phase 2) | done, awaiting your manual check |
-| 4 Prerequisites and learning model | — | not started |
+| 4 Prerequisites and learning model | `feat/phase-4-prerequisites` (on top of phase 3) | prerequisites done; **mastery model is a proposal only, waiting for your answer** (`docs/mastery-model-proposal.md`) |
 | 5 Retrieval breadth and inputs | — | not started |
 | 6 Tooling and hardening | — | not started |
 
@@ -163,6 +163,11 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
   taken; answers never before grading), `GET /sessions?topic_id=&course_id=&before_id=&limit=`
   (newest first, keyset paging, ownership-checked). UI: "Past quizzes" under the
   quiz, and a new **History** tab (grouped by day, topic filter, "Show older").
+- **Ollama's random HTTP 500.** A real 2-question run died on the second call with an
+  HTTP 500 (Ollama logged no reason; it is the failure the earlier handoff noted, probably
+  its JSON-constrained sampling). With the new design the first question was kept as a
+  partial quiz; and now a 5xx is retried once per question (`LLMResult.retryable`), while
+  not-running / not-pulled / timeout still fail at once.
 - Bug found by the existing embeddings test: every `commit()` expires ORM objects, so
   chunks loaded with `load_only` were re-read one by one *with* their embeddings;
   the worker now detaches them.
@@ -170,6 +175,37 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
   409 on a second start, leave-and-return and full reload resume the job, partial
   failure keeps the question and says why, total failure then Try again, past quizzes,
   history, no console errors) and the API-restart check above.
+
+### Phase 4 — what changed
+
+- **Loops are refused.** `POST /topics/prerequisites` now rejects any link that would
+  close a circle, however long (A needs B, B needs A; or A -> B -> C -> A). The 400
+  message names the chain, e.g. `That would create a loop (Sets -> Functions -> Sets):
+  'Functions' already depends on 'Sets'.` (`graph_service.loop_path`: the new edge
+  prerequisite -> topic closes a loop exactly when the topic already leads to the
+  prerequisite). The other checks (itself, duplicate, other course, ownership) are
+  unchanged and still come first. Old data that already contains a loop doesn't break
+  the graph or the learning order, and unrelated links can still be added.
+- **Removing a prerequisite.** `DELETE /topics/{topic_id}/prerequisites/{prerequisite_topic_id}`
+  -> 204; 404 if either topic isn't the caller's or the link isn't there. In the authz table.
+- **Graph UI.** In a topic's panel in the Knowledge graph: an x on each prerequisite and an
+  "Add a prerequisite" picker. The picker leaves out the topic itself, its existing
+  prerequisites and every topic that already depends on it (those would make a loop), via
+  `lib/graph-edit.candidatePrerequisites` (node-tested); if the page is stale and the server
+  still refuses, the panel shows the server's reason and nothing changes. After a change the
+  whole graph is reloaded, so edges, learning path and the tutor's prerequisite gaps agree.
+- **Mastery model: not built.** The proposal (estimate + memory strength with decay, and a
+  "what to study next" ranking) is in `docs/mastery-model-proposal.md`, with five decisions
+  I need from you. Nothing in the mastery code changed.
+- Verified: headless Chromium (13 checks: add, picker leaves out loop candidates, a
+  stale-page loop refused with the reason shown, remove; the only "failure" is Chromium
+  logging the deliberate HTTP 400).
+
+### Phase 4 — things to know
+
+- The loop check and the insert are not one atomic step, so two simultaneous adds could in
+  theory create a loop between them. Acceptable for a single-user app; a database can't
+  express "acyclic" as a constraint.
 
 ### Phase 3 — things to know
 
@@ -261,8 +297,7 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
 2. ~~In-flight generation guard is per-process~~ — moved into the database (Phase 3).
 3. ~~Tutor prompt received all 5 retrieved chunks~~ — fixed in Phase 1.
    Chat history is now saved server-side (Phase 2).
-4. **No UI** for adding prerequisites (Phase 4). Study-session history and past
-   quizzes have screens now (Phase 3).
+4. ~~No UI for prerequisites, session history or past quizzes~~ — all have screens now (Phases 3-4).
 5. `JWT_SECRET_KEY` has an insecure dev default — set it for anything beyond
    local use. CORS allows only localhost:3000/3002.
 6. Minor: `datetime.utcnow()` deprecation warnings in tests; unused schemas
