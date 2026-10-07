@@ -35,9 +35,16 @@ served by [Ollama](https://ollama.com).
   quiz; old quizzes and attempts are kept and can be reopened under "Past quizzes".
 - **Study history** — a timeline of every question you asked the tutor, quiz you
   took and self-report, with the mastery change each caused, filterable by topic.
-- **Mastery** — 0–100 per topic. ≥ 80 mastered, 1–79 in progress, 0 unmastered;
-  "missed" is set manually and cleared by the next improvement. Revision list
-  for topics you want to revisit.
+- **Mastery** — 0–100 per topic, and it fades. Each topic keeps an estimate of how
+  well you know it and a memory half-life; the score you see is the estimate times what
+  is left of the memory, so a topic you haven't reviewed drifts down (a mastered topic
+  can drop to "in progress"). A graded quiz moves the estimate by how much evidence it is
+  (a 10-question quiz counts for more than 1 lucky answer) and strengthens the memory,
+  most of all when the topic was already fading. ≥ 80 mastered, 1–79 in progress, 0
+  unmastered; "missed" is set manually and cleared by the next improvement. The Mastery
+  tab also says **what to study next**: topics due for review first, then topics whose
+  prerequisites are mastered, each with the reason. See
+  [`docs/mastery-model-proposal.md`](docs/mastery-model-proposal.md) for the formulas.
 - **Knowledge graph** — interactive prerequisite graph per course, tinted and
   filterable by module. Prerequisites are added and removed from a topic's panel in
   the graph; a link that would make a loop (A needs B needs A, or any longer circle)
@@ -150,6 +157,8 @@ in study sessions is kept). Migration 0007 adds the saved tutor conversations
 (old chats were never stored, so every topic starts empty). Migration 0008 adds
 background quiz jobs and a status on quiz sets (every existing quiz stays usable).
 Migration 0009 adds the keyword search index over existing chunks (SQLite only).
+Migration 0010 adds the mastery memory model's columns; scores you have today are carried
+over unchanged and start fading from the day you upgrade.
 
 ## Configuration
 
@@ -181,7 +190,7 @@ backend/app/
               prompt builder, context budget, llm, tutor, quiz, mastery, ordering
   ownership.py  every "does this belong to the caller" lookup
 backend/reindex.py          rebuild chunks/embeddings from stored text
-backend/alembic/versions/   0001 … 0009
+backend/alembic/versions/   0001 … 0010
 frontend/app/               / (home) and /course/[courseId]
 frontend/components/course/ chat, quiz, graph, mastery, sources, module rail
 frontend/lib/               API client, app state, pure helpers + tests

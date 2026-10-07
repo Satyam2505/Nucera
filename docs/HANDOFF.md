@@ -44,7 +44,7 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
 | 1 Retrieval and prompt correctness | `feat/phase-1-retrieval-prompts` | done, awaiting your manual check |
 | 2 Tutor experience (streaming, markdown, saved chats) | `feat/phase-2-tutor-experience` (on top of phase 1) | done, awaiting your manual check |
 | 3 Quizzes (background jobs, DB guard, history screens) | `feat/phase-3-quizzes` (on top of phase 2) | done, awaiting your manual check |
-| 4 Prerequisites and learning model | `feat/phase-4-prerequisites` (on top of phase 3) | prerequisites done; **mastery model is a proposal only, waiting for your answer** (`docs/mastery-model-proposal.md`) |
+| 4 Prerequisites and learning model | prerequisites: merged to `main`. Mastery model: `feat/mastery-model` (not merged) | **mastery model built with my recommended defaults** because you did not answer the questions: read the table at the end of `docs/mastery-model-proposal.md` |
 | 5 Retrieval breadth and inputs | `feat/phase-5-retrieval-inputs` (on top of phase 4) | done, awaiting your manual check |
 | 6 Tooling and hardening | — | **not started as a branch.** A first, untested draft of the auth half is in `git stash` (`stash@{0}`, see below) |
 
@@ -263,6 +263,34 @@ Still missing before that draft is usable: **migration 0010** (lower-case existi
 refusing with a clear message if two accounts differ only by capitalisation, then create the
 index) and its test, tests for everything above, `NUCERA_DEV=true` set in `tests/conftest.py`
 and `.env.example`, and the full suite run. Nothing in it was run beyond `import app.main`.
+
+### Phase 4 — the mastery model (branch `feat/mastery-model`, built on the cleanup branch)
+
+- **Model** (`services/mastery_model.py`, pure, tested against hand-worked numbers): per topic
+  `estimate` (0-1), `stability_days` (memory half-life, 3 to start) and `last_reviewed_at`; the
+  score shown is `100 x estimate x 0.5^(days since review / stability)`. A quiz of n questions
+  has weight n/(n+3); a pass lengthens the half-life in proportion to how much had faded; a fail
+  shortens it (never below 1 day); a topic is due below 80% retrievability.
+- **One central hook** (`models.py`): whenever a `Mastery` row is loaded or refreshed, its
+  `score`/`status` are set to the faded values as *committed* values, so every existing read path
+  (graph, course tree, course average, tutor prerequisite gaps, the API) sees the faded score,
+  nothing is written back by reading, and the stored column is just the score at the last review.
+  A row with no `last_reviewed_at` is left exactly as stored.
+- **All score changes go through `mastery_service`**: `record_quiz` (graded quizzes; the quiz's
+  `score_delta` is now the change in the score the student saw), `override_score` (`PUT /mastery`:
+  a fresh review), `apply_score_delta` (self-reports: not a review).
+- **Behaviour change you will notice:** quiz scores move differently. 5 of 5 on a new topic is
+  now 62 (weight 5/8), not +10 on the old scale, and a perfect quiz needs a second one to reach
+  "mastered". The old fixed formula `round((percent - 50) / 5)` is gone.
+- **Migration 0010** (+ test): three columns; existing scores carried over, clock starting at the
+  migration so nothing fades on upgrade day. The Phase 6 auth draft in `git stash` has its own
+  migration for lower-casing emails: it must be renumbered to **0011** when it is revived.
+- **"What to study next"**: `GET /courses/{id}/next?limit=` (`services/study_next.py`): reviews
+  first, then ready topics, each with a reason; shown at the top of the Mastery tab with a
+  "Review with a quiz" / "Start with the tutor" button, and a "Due for review" note in the
+  module list. `MasteryOut` gained `last_reviewed_at` and `due_for_review`.
+- Verified: model, hook, services, API, migration and ranking tests; headless browser check of
+  the Mastery tab with a topic aged three days in the database.
 
 ### Phase 4 — things to know
 

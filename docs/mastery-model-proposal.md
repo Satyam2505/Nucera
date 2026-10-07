@@ -1,7 +1,10 @@
 # Proposal: a mastery model with decay, and "what to study next"
 
-Status: **proposal, nothing built.** Phase 4 of the review follow-up said to propose this
-and wait for an answer. Decisions I need from you are at the end.
+Status: **implemented on branch `feat/mastery-model`, using my recommended answers.**
+The owner asked for the remaining Phase 4 work to continue without answering the questions
+below, so I built it with the defaults I had recommended; each is easy to change (they are
+constants in `services/mastery_model.py`, or one line where noted). Nothing is merged. If
+you disagree with any of them, the table at the end says what to change.
 
 ## What exists today
 
@@ -108,3 +111,20 @@ becomes consistent with it).
 
 If you'd rather keep it much simpler, the cheapest useful slice is only the "what to study
 next" recommendation (part 2) on top of today's scores, with no decay.
+
+
+## What was decided (and where to change it)
+
+| Question | Built as | To change it |
+|---|---|---|
+| 1. Does decay lower the displayed status? | **Yes**: the score shown fades and the status follows it (mastered can drop to in progress). | `mastery_model.refreshed_fields` derives the status; to only schedule reviews, return the stored status there instead. |
+| 2. Starting half-life | **3 days** (`INITIAL_STABILITY_DAYS`). | One constant. 7 days fades 50 -> 37 in 3 days instead of 25. |
+| 3. Do self-reports count as reviews? | **No**: a self-report moves the score shown by exactly that amount and the memory keeps fading. | `mastery_service.apply_score_delta`. |
+| 4. Manual score override (`PUT /mastery`) | **Kept**, as a fresh review at that level (clock restarts, half-life kept). | `mastery_service.override_score`. |
+| 5. "Up next" ranking | **As proposed**: due reviews (most overdue first), then ready topics (missed/flagged first, then by what they unlock, then course order). Blocked topics are not listed. | `services/study_next.py`. |
+
+Migration 0010 carries existing scores over so nothing changes the day you upgrade: the
+review clock starts at the migration (not at `last_updated`, which would drop every topic
+that has not been touched for a while the moment the app is upgraded) and the half-life is
+`3 + 0.1 x score` days. One thing differs from the sketch above: the first quiz on a topic
+that has a score from before the model starts from that score, not from zero.
