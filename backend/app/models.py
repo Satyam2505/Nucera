@@ -8,10 +8,12 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import relationship
@@ -144,6 +146,12 @@ class Topic(Base):
         cascade="all, delete-orphan",
         order_by="QuizSet.id",
     )
+    quiz_jobs = relationship(
+        "QuizJob",
+        back_populates="topic",
+        cascade="all, delete-orphan",
+        order_by="QuizJob.id",
+    )
     chat_messages = relationship(
         "ChatMessage",
         back_populates="topic",
@@ -261,6 +269,9 @@ class QuizSet(Base):
     topic_id = Column(
         Integer, ForeignKey("topics.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # "generating" while a job is still adding questions (the set is hidden from
+    # every quiz view until then), "ready" once it can be taken.
+    status = Column(String(16), nullable=False, default="ready", server_default="ready")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     topic = relationship("Topic", back_populates="quiz_sets")
@@ -347,3 +358,46 @@ class ChatMessage(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     topic = relationship("Topic", back_populates="chat_messages")
+
+
+class QuizJob(Base):
+    """One run of "write a quiz for this topic", done in the background one
+    question at a time (a CPU model takes minutes per question, so the request
+    that starts it returns at once and the page polls this row).
+
+    The one-active-job-per-topic rule lives in the database, as a partial unique
+    index over the active statuses: two requests racing to start a job can't both
+    insert, and the guard holds across processes and restarts (the old in-memory
+    guard did neither). Statuses: queued, running (active); succeeded (every
+    requested question written), partial (some, then a failure: the questions that
+    were written are kept as a ready quiz), failed (none written).
+    """
+
+    __tablename__ = "quiz_jobs"
+    __table_args__ = (
+        Index(
+            "uq_quiz_jobs_one_active_per_topic",
+            "topic_id",
+            unique=True,
+            sqlite_where=text("status IN ('queued', 'running')"),
+            postgresql_where=text("status IN ('queued', 'running')"),
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    topic_id = Column(
+        Integer, ForeignKey("topics.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # The set the job is filling (set to NULL if the job wrote nothing and the empty set was removed).
+    quiz_set_id = Column(Integer, ForeignKey("quiz_sets.id", ondelete="SET NULL"), nullable=True)
+    status = Column(String(16), nullable=False, default="queued")
+    requested = Column(Integer, nullable=False)
+    completed = Column(Integer, nullable=False, default=0)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    # Touched by the worker as it goes; a running job whose heartbeat is old is dead.
+    heartbeat_at = Column(DateTime, nullable=True)
+
+    topic = relationship("Topic", back_populates="quiz_jobs")
