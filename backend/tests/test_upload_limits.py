@@ -87,12 +87,12 @@ def test_a_real_pdf_is_accepted_even_with_an_upper_case_extension(client, topic)
 
 @pytest.mark.parametrize(
     "filename",
-    ["notes.docx", "image.png", "archive.zip", "notes", "notes.pdf.exe", "script.py", ".txt.bak"],
+    ["notes.doc", "slides.ppt", "image.png", "archive.zip", "notes", "notes.pdf.exe", "script.py", ".txt.bak"],
 )
 def test_other_file_types_are_415(client, db_session, topic, filename):
     resp = upload(client, topic, filename, b"some bytes")
     assert resp.status_code == 415
-    assert "PDF, .txt or .md" in resp.json()["detail"]
+    assert "PDF, Word (.docx), PowerPoint (.pptx), .txt or .md" in resp.json()["detail"]
     assert counts(db_session) == (0, 0)
 
 
@@ -132,7 +132,7 @@ def test_a_text_file_with_no_text_is_422(client, db_session, topic, content):
 def test_a_pdf_with_no_extractable_text_is_422(client, db_session, topic):
     resp = upload(client, topic, "blank.pdf", pdf_bytes(None, None))
     assert resp.status_code == 422
-    assert "OCR" in resp.json()["detail"]
+    assert "No text could be extracted" in resp.json()["detail"]
     assert counts(db_session) == (0, 0)
 
 
@@ -170,7 +170,7 @@ def test_a_file_over_the_limit_is_413_and_one_at_the_limit_is_fine(client, db_se
 
 def test_the_type_is_checked_before_the_size(client, topic, monkeypatch):
     monkeypatch.setattr(ingestion, "UPLOAD_MAX_BYTES", 10)
-    assert upload(client, topic, "big.docx", b"x" * 1000).status_code == 415
+    assert upload(client, topic, "big.doc", b"x" * 1000).status_code == 415
 
 
 # --- atomic ingestion -------------------------------------------------------------------------------

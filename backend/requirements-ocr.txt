@@ -1,0 +1,10 @@
+# Optional: local OCR so scanned PDFs can be read (nothing leaves the machine).
+# Install on top of requirements.txt:  pip install -r requirements-ocr.txt
+# Everything here runs on the CPU; the OCR models ship inside the rapidocr package.
+#
+# opencv-python is pinned to a build that works with numpy 1.26.4 (requirements.txt
+# pins numpy): rapidocr's own requirement would otherwise pull in OpenCV 5, which
+# needs numpy 2 and would upgrade it underneath torch and sentence-transformers.
+rapidocr-onnxruntime==1.4.4
+onnxruntime==1.30.0
+opencv-python==4.10.0.84
