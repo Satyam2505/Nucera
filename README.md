@@ -131,6 +131,8 @@ backend/alembic/versions/   0001 … 0006
 frontend/app/               / (home) and /course/[courseId]
 frontend/components/course/ chat, quiz, graph, mastery, sources, module rail
 frontend/lib/               API client, app state, pure helpers + tests
+brand/                      logo source files
+docs/                       handoff notes; docs/reports/ holds the project PDFs
 ```
 
-See `HANDOFF.md` for current status, known limitations and next steps.
+See [`docs/HANDOFF.md`](docs/HANDOFF.md) for current status, known limitations and next steps.
