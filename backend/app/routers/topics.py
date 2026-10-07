@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -67,9 +67,45 @@ def add_prerequisite(
     if existing:
         raise HTTPException(status_code=400, detail="Prerequisite already exists")
 
+    # A prerequisite loop (A needs B, B needs A, or any longer circle) would leave
+    # nothing to learn first and break the learning order, so it is refused. The
+    # message shows the existing chain the new link would close into a circle.
+    chain = graph_service.loop_path(
+        db, current_user.id, payload.topic_id, payload.prerequisite_topic_id
+    )
+    if chain is not None:
+        loop = " → ".join(chain + [chain[0]])
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"That would create a loop ({loop}): "
+                f"'{prerequisite_topic.name}' already depends on '{topic.name}'."
+            ),
+        )
+
     db.add(models.Prerequisite(**payload.model_dump()))
     db.commit()
     return {"status": "ok"}
+
+
+@router.delete("/{topic_id}/prerequisites/{prerequisite_topic_id}", status_code=204)
+def remove_prerequisite(
+    topic_id: int,
+    prerequisite_topic_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Remove the link that makes `prerequisite_topic_id` a prerequisite of
+    `topic_id`. Both topics must be the caller's (404 otherwise, like every other
+    route); 404 too when the link isn't there."""
+    get_owned_topic(db, topic_id, current_user)
+    get_owned_topic(db, prerequisite_topic_id, current_user)
+    link = db.get(models.Prerequisite, (topic_id, prerequisite_topic_id))
+    if link is None:
+        raise HTTPException(status_code=404, detail="Prerequisite not found")
+    db.delete(link)
+    db.commit()
+    return Response(status_code=204)
 
 
 @router.get("/graph/json")

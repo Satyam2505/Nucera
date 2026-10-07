@@ -48,6 +48,23 @@ def build_graph(db: Session, user_id: int) -> nx.DiGraph:
     return graph
 
 
+def loop_path(db: Session, user_id: int, topic_id: int, prerequisite_topic_id: int) -> Optional[list[str]]:
+    """Making `prerequisite_topic_id` a prerequisite of `topic_id` adds the edge
+    prerequisite -> topic. That closes a loop exactly when `topic_id` already leads
+    (through any chain of prerequisites) to `prerequisite_topic_id`; returns the
+    names along that existing chain, from `topic_id` to `prerequisite_topic_id`,
+    or None when the new edge is safe.
+    """
+    graph = build_graph(db, user_id)
+    if topic_id not in graph or prerequisite_topic_id not in graph:
+        return None
+    try:
+        path = nx.shortest_path(graph, topic_id, prerequisite_topic_id)
+    except nx.NetworkXNoPath:
+        return None
+    return [graph.nodes[node]["name"] for node in path]
+
+
 def get_unmastered_prerequisites(db: Session, topic_id: int, user_id: int) -> list[Topic]:
     graph = build_graph(db, user_id)
     if topic_id not in graph:
