@@ -3,9 +3,12 @@ on-topic from off-topic questions, using the real embedding model (no LLM
 involved). This is what the threshold in app/config.py was tuned against.
 """
 
+import pytest
+
 from app.config import RETRIEVAL_RELEVANCE_THRESHOLD
 from app.services.retrieval_service import retrieve_relevant_chunks
 from helpers import make_topic
+from relevance_corpus import NOTES, OFF_TOPIC, ON_TOPIC
 
 
 def _ingest(client, topic_id, title, text):
@@ -53,3 +56,59 @@ def test_off_topic_question_falls_below_the_threshold(client, db_session):
     )
     assert matches  # some chunk always comes back, it's just not relevant
     assert matches[0]["similarity_score"] < RETRIEVAL_RELEVANCE_THRESHOLD
+
+
+# --- the threshold against a labelled corpus ---------------------------------------------------
+#
+# RETRIEVAL_RELEVANCE_THRESHOLD depends on the embedding model and the chunk size,
+# so it is re-checked here against tests/relevance_corpus.py, ingested through the
+# real pipeline (chunking, tokenizer, embedder). If this fails after changing
+# either, re-measure and choose the threshold again; don't loosen the asserts.
+#
+# Measured when chunks were reduced to fit the embedder (11 chunks, 28 on-topic and
+# 16 off-topic questions): lowest on-topic top match 0.314, highest off-topic 0.290.
+# 0.35 is kept rather than the 0.30 midpoint: it refused 3 of 28 on-topic questions
+# and accepted none of the off-topic ones, and 0.30 leaves only a 0.01 margin that a
+# larger topic (more chunks to match by chance) would erode.
+
+@pytest.fixture()
+def corpus_topic(client):
+    topic_id = make_topic(client, "Study notes", course="Test")["id"]
+    for title, text in NOTES.items():
+        _ingest(client, topic_id, title, text)
+    return topic_id
+
+
+def _top_scores(client, db_session, topic_id, questions):
+    return {
+        q: retrieve_relevant_chunks(
+            db_session, q, user_id=client.user_id, topic_id=topic_id, top_k=1
+        )[0]["similarity_score"]
+        for q in questions
+    }
+
+
+def test_no_off_topic_question_clears_the_threshold(client, db_session, corpus_topic):
+    scores = _top_scores(client, db_session, corpus_topic, OFF_TOPIC)
+    accepted = {q: round(s, 3) for q, s in scores.items() if s >= RETRIEVAL_RELEVANCE_THRESHOLD}
+    assert not accepted, f"off-topic questions that would be answered: {accepted}"
+
+
+def test_off_topic_questions_keep_a_margin_below_the_threshold(client, db_session, corpus_topic):
+    scores = _top_scores(client, db_session, corpus_topic, OFF_TOPIC)
+    assert max(scores.values()) <= RETRIEVAL_RELEVANCE_THRESHOLD - 0.03
+
+
+def test_nearly_all_on_topic_questions_clear_the_threshold(client, db_session, corpus_topic):
+    scores = _top_scores(client, db_session, corpus_topic, ON_TOPIC)
+    refused = {q: round(s, 3) for q, s in scores.items() if s < RETRIEVAL_RELEVANCE_THRESHOLD}
+    # Short keyword queries and paraphrases score lowest; they are a known cost of
+    # a threshold that has to keep adjacent-topic questions out.
+    assert len(refused) <= 0.15 * len(ON_TOPIC), f"on-topic questions that would be refused: {refused}"
+
+
+def test_a_question_about_the_end_of_a_long_passage_is_found(client, db_session, corpus_topic):
+    """Under the old 2600-character chunks the last part of each chunk was past the
+    embedder's 256-token cut-off, and this query scored 0.01."""
+    matches = _top_scores(client, db_session, corpus_topic, ["load factor 0.75"])
+    assert matches["load factor 0.75"] > 0.2
