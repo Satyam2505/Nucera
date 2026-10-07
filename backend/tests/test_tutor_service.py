@@ -198,3 +198,68 @@ def test_llm_failure_returns_graceful_fallback_not_a_crash(monkeypatch):
     assert result.grounded is False
     assert "Ollama is not running" in result.answer
     assert result.sources == []
+
+
+# --- prepare / stream ---------------------------------------------------------------------------
+
+from app.services.tutor_service import (  # noqa: E402
+    ANSWER_INTERRUPTED_NOTE,
+    prepare_tutor_answer,
+    stream_tutor_answer,
+)
+
+STRONG = [{"source": "A.pdf", "page": 4, "text": "Relevant text.", "similarity": 0.9}]
+
+
+def test_prepare_returns_the_prompt_and_citations_without_calling_the_model(monkeypatch):
+    monkeypatch.setattr(
+        llm_service, "generate", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no model call"))
+    )
+    prepared = prepare_tutor_answer("Q?", STRONG, "T", 50, [])
+    assert prepared.immediate is None
+    assert prepared.sources == [{"source": "A.pdf", "page": 4}]
+    assert prepared.system_prompt == SYSTEM_PROMPT and "Relevant text." in prepared.user_prompt
+
+
+def test_prepare_for_an_unanswerable_question_is_already_final():
+    prepared = prepare_tutor_answer("Q?", [{**STRONG[0], "similarity": 0.01}], "T", 50, [])
+    assert prepared.immediate is not None and prepared.immediate.grounded is False
+
+
+def test_stream_with_nothing_to_ask_the_model_ends_immediately(monkeypatch):
+    monkeypatch.setattr(llm_service, "generate_stream", lambda *a, **k: (_ for _ in ()).throw(AssertionError))
+    prepared = prepare_tutor_answer("Q?", [], "T", 50, [])
+    events = list(stream_tutor_answer(prepared))
+    assert [kind for kind, _ in events] == ["end"] and events[0][1].grounded is False
+
+
+def _fake_stream(monkeypatch, pieces, result):
+    def fake(system, user, model=None, **kwargs):
+        for piece in pieces:
+            yield "token", piece
+        yield "end", result
+
+    monkeypatch.setattr(llm_service, "generate_stream", fake)
+
+
+def test_stream_yields_tokens_then_the_cited_answer(monkeypatch):
+    _fake_stream(monkeypatch, ["Hi ", "there"], llm_service.LLMResult(ok=True, text="Hi there"))
+    events = list(stream_tutor_answer(prepare_tutor_answer("Q?", STRONG, "T", 50, [])))
+    assert [e for e in events[:-1]] == [("token", "Hi "), ("token", "there")]
+    kind, answer = events[-1]
+    assert kind == "end" and answer.answer == "Hi there" and answer.grounded
+    assert answer.sources == [{"source": "A.pdf", "page": 4}]
+
+
+def test_stream_that_fails_before_any_text_is_the_unavailable_message(monkeypatch):
+    _fake_stream(monkeypatch, [], llm_service.LLMResult(ok=False, error="Ollama is not running or unreachable."))
+    (kind, answer), = list(stream_tutor_answer(prepare_tutor_answer("Q?", STRONG, "T", 50, [])))
+    assert kind == "end" and answer.grounded is False and answer.sources == []
+    assert "Ollama is not running" in answer.answer
+
+
+def test_stream_that_breaks_part_way_keeps_the_text_and_notes_the_interruption(monkeypatch):
+    _fake_stream(monkeypatch, ["Part"], llm_service.LLMResult(ok=False, text="Part", error="timed out"))
+    *_, (kind, answer) = list(stream_tutor_answer(prepare_tutor_answer("Q?", STRONG, "T", 50, [])))
+    assert answer.answer == "Part" + ANSWER_INTERRUPTED_NOTE.format(detail="timed out")
+    assert answer.grounded is True and answer.sources == [{"source": "A.pdf", "page": 4}]

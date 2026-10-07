@@ -75,6 +75,14 @@ ROUTES = [
         lambda w: {"json": {"query": "anything", "topic_id": w["topic"]}},
     ),
     (
+        "ask-stream",
+        "post",
+        lambda w: "/ask/stream",
+        lambda w: {"json": {"query": "anything", "topic_id": w["topic"]}},
+    ),
+    ("get-chat", "get", lambda w: f"/chat/{w['topic']}", lambda w: {}),
+    ("clear-chat", "delete", lambda w: f"/chat/{w['topic']}", lambda w: {}),
+    (
         "retrieve-topic",
         "post",
         lambda w: "/retrieve",
@@ -123,6 +131,7 @@ def world(client, db_session):
     )
     quiz_set.questions.append(question)
     db_session.add(quiz_set)
+    db_session.add(models.ChatMessage(topic_id=topic["id"], role="user", content="A's private question"))
     db_session.commit()
     mastery = client.put(f"/mastery/{topic['id']}", json={"score": 50}).json()
     return {
@@ -168,6 +177,7 @@ def test_cross_user_attempts_change_nothing(world, client, other_client, db_sess
     assert count(models.StudySession) == 0
     assert count(models.QuizSet) == 1  # nothing generated for A by B's attempt
     assert count(models.QuizAttempt) == 0
+    assert count(models.ChatMessage) == 1  # B could neither add to nor clear A's conversation
     mastery = db_session.get(models.Mastery, world["topic"])
     assert mastery.score == 50
     assert mastery.status.value == world["status"]

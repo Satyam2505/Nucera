@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, List, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, field_validator
 
 from app.models import MasteryStatus, SessionType, SourceType
 
@@ -252,18 +252,16 @@ class QuizState(BaseModel):
     has_material: bool
 
 
-class ChatTurn(BaseModel):
-    role: str  # "user" | "assistant"
-    text: str
-
-
 class AskRequest(BaseModel):
-    query: str
+    query: str = Field(min_length=1, max_length=4000)
     topic_id: int
-    # Short, client-held conversation history (the frontend already keeps
-    # this in memory) — only the most recent few turns are used server-side.
-    # Not persisted; see known limitations re: the sessions table.
-    history: Optional[List[ChatTurn]] = None
+
+    @field_validator("query")
+    @classmethod
+    def _query_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Ask a question.")
+        return value.strip()
 
 
 class AskResponse(BaseModel):
@@ -295,3 +293,21 @@ class RetrievedChunk(BaseModel):
 class RetrieveResponse(BaseModel):
     question: str
     results: List[RetrievedChunk]
+
+
+class ChatMessageOut(BaseModel):
+    """One saved turn of a topic's tutor conversation."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    role: str
+    content: str
+    sources: List[SourceCitation] = []
+    flagged: List[str] = []
+    grounded: Optional[bool] = None
+    created_at: datetime
+
+    @field_validator("sources", "flagged", mode="before")
+    @classmethod
+    def _none_is_empty(cls, value):
+        return [] if value is None else value
