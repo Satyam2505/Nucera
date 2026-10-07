@@ -19,6 +19,9 @@ served by [Ollama](https://ollama.com).
 - **Grounded tutor** — answers use only the retrieved passages of your material,
   cite source and page, adapt depth to your mastery, and flag unmastered
   prerequisites. If nothing relevant is found, it says so instead of guessing.
+  Answers stream in as they are written (with a Stop button), render as markdown
+  with maths and syntax-highlighted code, and each topic's conversation is saved
+  on the server so it survives a reload or a topic switch.
 - **Generated quizzes** — multiple-choice questions written by the local LLM
   from your material, validated server-side, each with an explanation and a
   citation. One graded attempt per quiz; old quizzes and attempts are kept.
@@ -116,7 +119,8 @@ alembic upgrade head
 
 Migration 0005 turns each old course name into a course with one "General"
 module. Migration 0006 removes the old placeholder quiz questions (quiz history
-in study sessions is kept).
+in study sessions is kept). Migration 0007 adds the saved tutor conversations
+(old chats were never stored, so every topic starts empty).
 
 ## Configuration
 
@@ -148,7 +152,7 @@ backend/app/
               prompt builder, context budget, llm, tutor, quiz, mastery, ordering
   ownership.py  every "does this belong to the caller" lookup
 backend/reindex.py          rebuild chunks/embeddings from stored text
-backend/alembic/versions/   0001 … 0006
+backend/alembic/versions/   0001 … 0007
 frontend/app/               / (home) and /course/[courseId]
 frontend/components/course/ chat, quiz, graph, mastery, sources, module rail
 frontend/lib/               API client, app state, pure helpers + tests

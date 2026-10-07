@@ -42,7 +42,7 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
 | Phase | Branch | State |
 |---|---|---|
 | 1 Retrieval and prompt correctness | `feat/phase-1-retrieval-prompts` | done, awaiting your manual check |
-| 2 Tutor experience (streaming, markdown, saved chats) | — | not started |
+| 2 Tutor experience (streaming, markdown, saved chats) | `feat/phase-2-tutor-experience` (on top of phase 1) | done, awaiting your manual check |
 | 3 Quizzes (background jobs, DB guard, history screens) | — | not started |
 | 4 Prerequisites and learning model | — | not started |
 | 5 Retrieval breadth and inputs | — | not started |
@@ -93,6 +93,53 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
 - Also: `OLLAMA_TIMEOUT_SECONDS` default 120 -> 300 (the first real question timed
   out), tutor system prompt asks for ~250 words so the output cap doesn't cut
   answers mid-sentence.
+
+### Phase 2 — what changed
+
+- **Streaming.** `POST /ask/stream` answers as NDJSON, one object per line: `token`
+  lines, then one `done` line (final answer, citations, grounded flag, prerequisite
+  gaps) or an `error` line. `llm_service.generate_stream` reads Ollama's streaming
+  API; `OLLAMA_TIMEOUT_SECONDS` bounds the wait for each piece, not the whole
+  answer. A connection that drops part-way keeps the text that arrived and says so.
+  `/ask` (blocking) still exists and behaves as before.
+- **Stop / disconnect really stops the model.** `llm_service.StreamAbort` closes the
+  connection to Ollama; the async body wrapper (`routers/tutor._stream_body`)
+  triggers it when the browser goes away, even while the model is silent. Caveat:
+  Ollama only sends headers once it has read the prompt, so a Stop pressed *before
+  the first word* takes effect then (up to about a minute on this CPU), not instantly.
+  Verified against the stub: the stub saw the connection close.
+- **Saved conversations.** Table `chat_messages` (migration 0007 + test), `GET
+  /chat/{topic_id}` (newest 200, oldest first; `?limit=`), `DELETE /chat/{topic_id}`.
+  Ownership through `get_owned_topic`, listed in the authz route table. A turn (question
+  + answer + a `chat` study session) is saved only when its answer completes, so a
+  stopped or abandoned answer leaves nothing half-saved.
+- **History comes from the server.** The model's follow-up context is the topic's
+  last 6 saved messages; the `history` field the client used to send is gone (an
+  old client that still sends it is ignored, and a forged "assistant" turn can't be
+  injected). `query` is now 1-4000 characters and not blank.
+- **UI.** `ChatView` loads the saved conversation, streams, has Stop (hands the
+  unanswered question back to edit) and "Clear conversation" (confirm dialog).
+  `Markdown.tsx` renders markdown (GFM tables), maths via KaTeX (`$..$`, `$$..$$`,
+  and the `\( \)` / `\[ \]` small models write, rewritten by `lib/chat.normalizeMath`)
+  and highlighted code; raw HTML is not rendered. New packages: react-markdown,
+  remark-gfm, remark-math, rehype-katex, katex, rehype-highlight.
+- **Bug found by the browser run:** pressing Stop also re-submitted the question
+  (React reused the button element, which turned back into a submit button before the
+  click's default action ran). Fixed with distinct keys + `preventDefault`.
+- Verified: headless Chromium against a stub Ollama (21 checks: growth while
+  streaming, bold/list/KaTeX inline+display/code/table, citations, reload, topic
+  switch, Stop, Clear, no console errors, model connection closed) and against the
+  real model (first word after 33 s instead of waiting ~119 s for the whole answer).
+  Migration 0005-0007 run on a copy of the real `dev.db` (row counts preserved;
+  original byte-identical).
+
+### Phase 2 — things to know
+
+- **Follow-ups are retrieved on their own text.** "Why does that matter?" has no words
+  in common with the notes, so it is refused by the relevance threshold. The saved
+  history is given to the model, but it doesn't help retrieval. Possible fix: search
+  with the previous question prepended for short follow-ups. Not done.
+- Switching topic while an answer is being written stops it (nothing is saved).
 
 ### Phase 1 — things to know
 
@@ -166,7 +213,7 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
 2. **In-flight generation guard is per-process** (fine for `uvicorn --reload`
    single worker). The DB constraint still protects grading data.
 3. ~~Tutor prompt received all 5 retrieved chunks~~ — fixed in Phase 1.
-   Chat history is still client-side only (Phase 2).
+   Chat history is now saved server-side (Phase 2).
 4. **No UI** for adding prerequisites, viewing study-session history, or
    browsing past quizzes (all stored server-side).
 5. `JWT_SECRET_KEY` has an insecure dev default — set it for anything beyond
