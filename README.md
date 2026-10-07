@@ -24,7 +24,12 @@ served by [Ollama](https://ollama.com).
   on the server so it survives a reload or a topic switch.
 - **Generated quizzes** — multiple-choice questions written by the local LLM
   from your material, validated server-side, each with an explanation and a
-  citation. One graded attempt per quiz; old quizzes and attempts are kept.
+  citation. Writing happens in the background, one question at a time (3 by
+  default) with a progress bar; leaving the page doesn't stop it, and if the model
+  fails part-way the questions already written are kept. One graded attempt per
+  quiz; old quizzes and attempts are kept and can be reopened under "Past quizzes".
+- **Study history** — a timeline of every question you asked the tutor, quiz you
+  took and self-report, with the mastery change each caused, filterable by topic.
 - **Mastery** — 0–100 per topic. ≥ 80 mastered, 1–79 in progress, 0 unmastered;
   "missed" is set manually and cleared by the next improvement. Revision list
   for topics you want to revisit.
@@ -120,7 +125,8 @@ alembic upgrade head
 Migration 0005 turns each old course name into a course with one "General"
 module. Migration 0006 removes the old placeholder quiz questions (quiz history
 in study sessions is kept). Migration 0007 adds the saved tutor conversations
-(old chats were never stored, so every topic starts empty).
+(old chats were never stored, so every topic starts empty). Migration 0008 adds
+background quiz jobs and a status on quiz sets (every existing quiz stays usable).
 
 ## Configuration
 
@@ -152,7 +158,7 @@ backend/app/
               prompt builder, context budget, llm, tutor, quiz, mastery, ordering
   ownership.py  every "does this belong to the caller" lookup
 backend/reindex.py          rebuild chunks/embeddings from stored text
-backend/alembic/versions/   0001 … 0007
+backend/alembic/versions/   0001 … 0008
 frontend/app/               / (home) and /course/[courseId]
 frontend/components/course/ chat, quiz, graph, mastery, sources, module rail
 frontend/lib/               API client, app state, pure helpers + tests

@@ -43,7 +43,7 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
 |---|---|---|
 | 1 Retrieval and prompt correctness | `feat/phase-1-retrieval-prompts` | done, awaiting your manual check |
 | 2 Tutor experience (streaming, markdown, saved chats) | `feat/phase-2-tutor-experience` (on top of phase 1) | done, awaiting your manual check |
-| 3 Quizzes (background jobs, DB guard, history screens) | — | not started |
+| 3 Quizzes (background jobs, DB guard, history screens) | `feat/phase-3-quizzes` (on top of phase 2) | done, awaiting your manual check |
 | 4 Prerequisites and learning model | — | not started |
 | 5 Retrieval breadth and inputs | — | not started |
 | 6 Tooling and hardening | — | not started |
@@ -133,6 +133,53 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
   Migration 0005-0007 run on a copy of the real `dev.db` (row counts preserved;
   original byte-identical).
 
+### Phase 3 — what changed
+
+- **Quiz generation is a background job.** `POST /quiz/{topic}/generate` returns 202
+  with a job; `GET /quiz/jobs/{id}` is what the page polls (every 2.5 s). A daemon
+  thread (`services/quiz_jobs.py`) writes the questions; `spawn` is the one place
+  that starts it, so tests run it inline. Default is now 3 questions (`count` 1-10).
+  **This changed the API:** generate used to return the finished quiz.
+- **One model call per question**, each with a fresh few excerpts (`QUIZ_MAX_EXCERPTS`
+  is now 3 per question, was 8 for the whole quiz) and a list of the questions
+  already written, so they differ. Each question is committed as it is validated, so a
+  failure keeps what exists: the job ends `partial` (a ready quiz with fewer
+  questions, plus the reason) or `failed` (nothing written, no set left behind).
+  A question that comes back unusable twice is skipped and the next gets a try.
+  `QUIZ_MIN_VALID_QUESTIONS` is gone.
+- **The in-flight guard is the database's.** `quiz_jobs` has a partial unique index
+  over the active statuses, so two requests (or two processes) can't both start a
+  job for a topic; the loser gets 409. A job that stops reporting progress
+  (`QUIZ_JOB_STALE_SECONDS`, default 1500) is closed as dead, and at server start
+  every job still marked active is closed (its worker died with the process): the
+  questions it had written are kept as a partial quiz. Verified by killing and
+  restarting the API mid-job.
+- **A quiz being written is invisible** (`quiz_sets.status = 'generating'`): not in
+  `GET /quiz`, history, `/quiz/sets/{id}` or grading (404). Migration 0008 + test;
+  existing sets become `ready`. The test of the downgrade found that SQLite doesn't
+  enforce `ON DELETE CASCADE` inside a migration, so it deletes the questions itself.
+- **Past quizzes and history.** `GET /quiz/{topic}/history` (summaries),
+  `GET /quiz/sets/{id}` (a taken one shows its results, an untaken one can still be
+  taken; answers never before grading), `GET /sessions?topic_id=&course_id=&before_id=&limit=`
+  (newest first, keyset paging, ownership-checked). UI: "Past quizzes" under the
+  quiz, and a new **History** tab (grouped by day, topic filter, "Show older").
+- Bug found by the existing embeddings test: every `commit()` expires ORM objects, so
+  chunks loaded with `load_only` were re-read one by one *with* their embeddings;
+  the worker now detaches them.
+- Verified: headless Chromium against the stub model (24 checks: progress advancing,
+  409 on a second start, leave-and-return and full reload resume the job, partial
+  failure keeps the question and says why, total failure then Try again, past quizzes,
+  history, no console errors) and the API-restart check above.
+
+### Phase 3 — things to know
+
+- No cancel button: a started job runs to the end or to its first model failure.
+- One question costs about two minutes on this CPU (prompt ~35 s + ~75 s of writing),
+  so 3 questions is about 6 minutes: roughly what 5 used to cost, but with progress and
+  without losing everything to one failure.
+- A topic deleted mid-run is noticed before the next write; there is a sub-second
+  window in which one more question row could be written for a deleted set.
+
 ### Phase 2 — things to know
 
 - **Follow-ups are retrieved on their own text.** "Why does that matter?" has no words
@@ -208,14 +255,14 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
 
 ## Known limitations and next steps
 
-1. **Quiz speed on CPU.** Options: stream generation progress, default to 3
-   questions, or recommend a faster model / GPU. Worth deciding with real use.
-2. **In-flight generation guard is per-process** (fine for `uvicorn --reload`
-   single worker). The DB constraint still protects grading data.
+1. **Quiz speed on CPU.** Progress is now shown and the default is 3 questions
+   (Phase 3), but a question still takes about two minutes. A faster model or a GPU
+   is the remaining lever.
+2. ~~In-flight generation guard is per-process~~ — moved into the database (Phase 3).
 3. ~~Tutor prompt received all 5 retrieved chunks~~ — fixed in Phase 1.
    Chat history is now saved server-side (Phase 2).
-4. **No UI** for adding prerequisites, viewing study-session history, or
-   browsing past quizzes (all stored server-side).
+4. **No UI** for adding prerequisites (Phase 4). Study-session history and past
+   quizzes have screens now (Phase 3).
 5. `JWT_SECRET_KEY` has an insecure dev default — set it for anything beyond
    local use. CORS allows only localhost:3000/3002.
 6. Minor: `datetime.utcnow()` deprecation warnings in tests; unused schemas
