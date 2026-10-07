@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
 from app.deps import get_current_user
-from app.ownership import get_owned_topic
+from app.ownership import get_owned_course, get_owned_topic
 from app.services.mastery_service import apply_score_delta, set_score
 
 router = APIRouter(tags=["mastery"])
@@ -106,3 +108,48 @@ def record_session(
     db.commit()
     db.refresh(session)
     return session
+
+
+@router.get("/sessions", response_model=List[schemas.SessionHistoryItem])
+def list_sessions(
+    topic_id: Optional[int] = None,
+    course_id: Optional[int] = None,
+    before_id: Optional[int] = Query(default=None, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """The caller's study-session history, newest first: chats, graded quizzes and
+    self reports. Narrow it to one topic or one course (each checked for
+    ownership); with neither, it covers all of the caller's courses. Page back
+    with `before_id` set to the last id received."""
+    if topic_id is not None:
+        get_owned_topic(db, topic_id, current_user)
+    if course_id is not None:
+        get_owned_course(db, course_id, current_user)
+
+    query = (
+        db.query(models.StudySession, models.Topic.name)
+        .join(models.Topic, models.StudySession.topic_id == models.Topic.id)
+        .join(models.Module, models.Topic.module_id == models.Module.id)
+        .join(models.Course, models.Module.course_id == models.Course.id)
+        .filter(models.Course.user_id == current_user.id)
+    )
+    if topic_id is not None:
+        query = query.filter(models.StudySession.topic_id == topic_id)
+    if course_id is not None:
+        query = query.filter(models.Course.id == course_id)
+    if before_id is not None:
+        query = query.filter(models.StudySession.id < before_id)
+    rows = query.order_by(models.StudySession.id.desc()).limit(limit).all()
+    return [
+        schemas.SessionHistoryItem(
+            id=session.id,
+            topic_id=session.topic_id,
+            topic_name=name,
+            type=session.type,
+            score_delta=session.score_delta,
+            timestamp=session.timestamp,
+        )
+        for session, name in rows
+    ]

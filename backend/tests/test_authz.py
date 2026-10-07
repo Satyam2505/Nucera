@@ -80,6 +80,11 @@ ROUTES = [
         lambda w: "/ask/stream",
         lambda w: {"json": {"query": "anything", "topic_id": w["topic"]}},
     ),
+    ("get-quiz-job", "get", lambda w: f"/quiz/jobs/{w['job']}", lambda w: {}),
+    ("quiz-history", "get", lambda w: f"/quiz/{w['topic']}/history", lambda w: {}),
+    ("get-quiz-set", "get", lambda w: f"/quiz/sets/{w['quiz_set']}", lambda w: {}),
+    ("sessions-by-topic", "get", lambda w: f"/sessions?topic_id={w['topic']}", lambda w: {}),
+    ("sessions-by-course", "get", lambda w: f"/sessions?course_id={w['course']}", lambda w: {}),
     ("get-chat", "get", lambda w: f"/chat/{w['topic']}", lambda w: {}),
     ("clear-chat", "delete", lambda w: f"/chat/{w['topic']}", lambda w: {}),
     (
@@ -132,10 +137,14 @@ def world(client, db_session):
     quiz_set.questions.append(question)
     db_session.add(quiz_set)
     db_session.add(models.ChatMessage(topic_id=topic["id"], role="user", content="A's private question"))
+    job = models.QuizJob(topic_id=topic["id"], status="succeeded", requested=3, completed=3)
+    db_session.add(job)
     db_session.commit()
     mastery = client.put(f"/mastery/{topic['id']}", json={"score": 50}).json()
     return {
         "topic": topic["id"],
+        "course": topic["course_id"],
+        "job": job.id,
         "source": source.id,
         "chunk": chunk.id,
         "quiz_set": quiz_set.id,
@@ -178,6 +187,7 @@ def test_cross_user_attempts_change_nothing(world, client, other_client, db_sess
     assert count(models.QuizSet) == 1  # nothing generated for A by B's attempt
     assert count(models.QuizAttempt) == 0
     assert count(models.ChatMessage) == 1  # B could neither add to nor clear A's conversation
+    assert count(models.QuizJob) == 1  # nor start a quiz job on A's topic
     mastery = db_session.get(models.Mastery, world["topic"])
     assert mastery.score == 50
     assert mastery.status.value == world["status"]
