@@ -46,7 +46,7 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
 | 3 Quizzes (background jobs, DB guard, history screens) | `feat/phase-3-quizzes` (on top of phase 2) | done, awaiting your manual check |
 | 4 Prerequisites and learning model | `feat/phase-4-prerequisites` (on top of phase 3) | prerequisites done; **mastery model is a proposal only, waiting for your answer** (`docs/mastery-model-proposal.md`) |
 | 5 Retrieval breadth and inputs | `feat/phase-5-retrieval-inputs` (on top of phase 4) | done, awaiting your manual check |
-| 6 Tooling and hardening | — | not started |
+| 6 Tooling and hardening | — | **not started as a branch.** A first, untested draft of the auth half is in `git stash` (`stash@{0}`, see below) |
 
 ### Phase 1 — what changed
 
@@ -243,6 +243,26 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
   has the keyword index; until then the app has no hybrid search.
 - OCR is the slow path of an upload; a 30-page scan can take a couple of minutes with no
   progress shown. Not streamed or backgrounded yet.
+
+### Phase 6 — where it was left
+
+Not done: CI workflow, requirements split (dev vs runtime), macOS/Linux README steps, and
+the auth items. A draft of the auth half was written and then shelved untested with
+`git stash` (on top of `feat/phase-5-retrieval-inputs`; `git stash list` shows it, `git
+stash show -p` shows it, `git stash pop` brings it back). What it contains:
+
+- `app/main.py` becomes an app factory (`create_app`) and refuses to start when
+  `JWT_SECRET_KEY` is the built-in default or under 32 characters, unless `NUCERA_DEV=true`.
+- Emails normalised to lower case (`security.normalize_email`, a case-insensitive lookup
+  for old rows, a functional unique index `uq_users_email_lower` in the model).
+- `services/login_limiter.py`: in-memory failed-login limit per (address, email) plus a
+  looser per-address cap, with a 429 and `Retry-After`; wired into `/auth/login`.
+- `CORS_ORIGINS` setting (comma separated, `*` refused).
+
+Still missing before that draft is usable: **migration 0010** (lower-case existing emails,
+refusing with a clear message if two accounts differ only by capitalisation, then create the
+index) and its test, tests for everything above, `NUCERA_DEV=true` set in `tests/conftest.py`
+and `.env.example`, and the full suite run. Nothing in it was run beyond `import app.main`.
 
 ### Phase 4 — things to know
 
