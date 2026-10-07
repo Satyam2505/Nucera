@@ -144,6 +144,12 @@ class Topic(Base):
         cascade="all, delete-orphan",
         order_by="QuizSet.id",
     )
+    chat_messages = relationship(
+        "ChatMessage",
+        back_populates="topic",
+        cascade="all, delete-orphan",
+        order_by="ChatMessage.id",
+    )
 
     prerequisites = relationship(
         "Prerequisite",
@@ -315,3 +321,29 @@ class QuizAttempt(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     quiz_set = relationship("QuizSet", back_populates="attempts")
+
+
+class ChatMessage(Base):
+    """One turn of a topic's tutor conversation, kept server-side so it
+    survives a reload or a topic switch. Ownership resolves through the topic.
+
+    `sources`, `flagged` and `grounded` are only set on assistant messages and
+    are snapshots of what the student saw: citations as [{"source", "page"}],
+    unmastered prerequisites as topic names, and whether the answer was grounded
+    in the material (False for the "couldn't find it" / "model unavailable" replies).
+    """
+
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True)
+    topic_id = Column(
+        Integer, ForeignKey("topics.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role = Column(String(16), nullable=False)  # "user" | "assistant"
+    content = Column(Text, nullable=False)
+    sources = Column(JSON, nullable=True)
+    flagged = Column(JSON, nullable=True)
+    grounded = Column(Boolean, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    topic = relationship("Topic", back_populates="chat_messages")
