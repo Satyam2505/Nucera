@@ -1,40 +1,35 @@
-# Nucera — Handoff (updated 2026-10-06, overnight session)
+# Nucera — Handoff (updated 2026-10-07)
 
 Read this first. The README covers setup; this file covers status, open
 work and the decisions behind it.
 
 ## Where things stand
 
-Two unmerged branches, stacked on `main`, nothing pushed:
+`main` already contains both `feat/course-modules` and `feat/hardening`
+(`main`, `feat/hardening` and `origin/main` all point at `6c8c54f`), so there
+is nothing left to merge from those two. Work since then lands on one branch
+per phase of the review follow-up plan; nothing is pushed or merged to `main`
+without the owner.
+
+Verification at `6c8c54f`: backend `pytest` 285 passed; `tsc --noEmit` clean;
+node tests 86 passed (graph 46, greeting 26, api-errors 7, quiz 7); headless
+browser run with two accounts — every check passed, except one path only
+verified against a stand-in model (see "Real-model findings").
+
+### Migrating an older database
+
+If your `backend/dev.db` predates the course/module hierarchy:
 
 ```
-main (7a907c0)
- └─ feat/course-modules   Course → Module → Topic hierarchy
-     └─ feat/hardening    security, mastery rule, real quizzes, upload robustness
-```
-
-`feat/hardening` contains everything; merging it into `main` brings both.
-Each commit on both branches was reviewed before the next one started.
-
-Verification at the tip of `feat/hardening`: backend `pytest` 285 passed;
-`tsc --noEmit` clean; node tests 60 passed (graph 46, api-errors 7, quiz 7);
-headless browser run with two accounts — every check passed, except one
-path only verified against a stand-in model (see "Real-model findings").
-
-### To merge and migrate your database
-
-```
-git checkout main
-git merge --ff-only feat/hardening
 cd backend
 copy dev.db dev.db.bak
 alembic upgrade head
 ```
 
 - 0005: each existing course name becomes a course with one "General" module.
-- 0006: deletes the old placeholder ("[stub]") quiz questions — 24 in your
-  dev.db, including 3 orphans — and creates quiz sets/attempts. Quiz study
-  sessions and mastery history are kept.
+- 0006: deletes the old placeholder ("[stub]") quiz questions — 24 in the
+  original dev.db, including 3 orphans — and creates quiz sets/attempts. Quiz
+  study sessions and mastery history are kept.
 - Some existing topics may show a status that doesn't match their score
   until their next score change (no migration for that, deliberately).
 - Saved graph layouts reset once (now keyed by course id).
