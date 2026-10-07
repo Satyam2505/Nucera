@@ -14,12 +14,31 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
 # changes anywhere else.
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-OLLAMA_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
+# Measured with llama3.2:3b on a laptop CPU: the prompt is read at ~18 tokens/s
+# and the reply written at ~4 tokens/s, so a ~900-token prompt and a 300-token
+# answer take 2-3 minutes. 120 s timed out on the first real question.
+OLLAMA_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "300"))
+
+# Context window and sampling, sent with every request. Without num_ctx Ollama
+# applies its own default, and a prompt longer than that is silently cut from
+# the front, which is where the grounding rules in the system prompt live. The
+# prompt builders size their prompts to fit this window (see
+# app/services/context_budget.py): prompt + reply must stay within NUM_CTX.
+# It is one value for tutor and quiz on purpose: Ollama reloads the model when
+# num_ctx changes between requests, which is slow on a CPU. Raising it costs
+# memory (KV cache) and prompt-processing time, so keep it as small as works.
+OLLAMA_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "4096"))
+# Low, because the tutor is meant to restate the material, not improvise.
+OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.2"))
+# Longest tutor reply, in tokens (the system prompt asks for ~250 words, which is
+# about 350 tokens). Also the room the prompt budget keeps free.
+OLLAMA_MAX_OUTPUT_TOKENS = int(os.getenv("OLLAMA_MAX_OUTPUT_TOKENS", "600"))
 
 # Below this top-match cosine similarity, retrieval is treated as "nothing
-# relevant found" and the LLM is not called at all — see
-# app/services/tutor_service.py. Tuned empirically against real retrieval
-# results (see backend/tests and the milestone verification notes).
+# relevant found" and the LLM is not called at all, and only chunks at or above
+# it are sent to the model — see app/services/tutor_service.py. It depends on
+# the embedding model AND the chunk size, so re-check it
+# (tests/test_relevance_threshold.py) whenever either changes.
 RETRIEVAL_RELEVANCE_THRESHOLD = float(os.getenv("RETRIEVAL_RELEVANCE_THRESHOLD", "0.35"))
 
 # Largest accepted upload. The cap protects the server (a file is read into
@@ -37,6 +56,13 @@ QUIZ_MIN_VALID_QUESTIONS = int(os.getenv("QUIZ_MIN_VALID_QUESTIONS", "3"))
 QUIZ_MAX_EXCERPTS = int(os.getenv("QUIZ_MAX_EXCERPTS", "8"))
 QUIZ_CONTEXT_CHAR_BUDGET = int(os.getenv("QUIZ_CONTEXT_CHAR_BUDGET", "9000"))
 QUIZ_LLM_TIMEOUT_SECONDS = float(os.getenv("QUIZ_LLM_TIMEOUT_SECONDS", "600"))
+# Quiz sampling is a little warmer than the tutor's so regenerating a quiz
+# doesn't reproduce it, but still low enough to keep the JSON well-formed.
+QUIZ_TEMPERATURE = float(os.getenv("QUIZ_TEMPERATURE", "0.4"))
+# Room reserved for the reply, per question (a measured question is ~220-280
+# tokens of JSON). The excerpts get whatever is left of OLLAMA_NUM_CTX after
+# this and the system prompt, up to QUIZ_CONTEXT_CHAR_BUDGET.
+QUIZ_TOKENS_PER_QUESTION = int(os.getenv("QUIZ_TOKENS_PER_QUESTION", "300"))
 
 # Auth. JWT_SECRET_KEY MUST be overridden via env in any real deployment —
 # the fallback only exists so local dev works out of the box on a single
