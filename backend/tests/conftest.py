@@ -11,6 +11,10 @@ TEST_DB_PATH = BACKEND_DIR / "tests" / "test.db"
 if TEST_DB_PATH.exists():
     TEST_DB_PATH.unlink()
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH.as_posix()}"
+# The app refuses to start with the built-in JWT secret unless this is set; the test
+# environment runs with the default, so it opts in (the refusal itself is tested in
+# test_auth_hardening.py by switching it off again).
+os.environ["NUCERA_DEV"] = "true"
 
 import pytest  # noqa: E402
 
@@ -28,6 +32,17 @@ def _schema():
     engine.dispose()
     if TEST_DB_PATH.exists():
         TEST_DB_PATH.unlink()
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_limiter():
+    """Failed sign-ins are remembered per process; one test's failures must not lock
+    out the next test's login."""
+    from app.services.login_limiter import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 @pytest.fixture(autouse=True)

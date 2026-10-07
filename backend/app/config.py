@@ -92,9 +92,42 @@ QUIZ_TEMPERATURE = float(os.getenv("QUIZ_TEMPERATURE", "0.4"))
 # this and the system prompt, up to QUIZ_CONTEXT_CHAR_BUDGET.
 QUIZ_TOKENS_PER_QUESTION = int(os.getenv("QUIZ_TOKENS_PER_QUESTION", "300"))
 
-# Auth. JWT_SECRET_KEY MUST be overridden via env in any real deployment —
-# the fallback only exists so local dev works out of the box on a single
-# machine with no other users.
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-only-insecure-secret-change-me")
+# Auth. Tokens are signed with JWT_SECRET_KEY, so the app REFUSES TO START with the
+# built-in default or a short secret (see app/main.py), unless NUCERA_DEV=true, which
+# is only for running on your own machine.
+DEFAULT_JWT_SECRET = "dev-only-insecure-secret-change-me"
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", DEFAULT_JWT_SECRET)
+JWT_MIN_SECRET_CHARS = 32
+NUCERA_DEV = os.getenv("NUCERA_DEV", "false").lower() in ("1", "true", "yes", "on")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "10080"))  # 7 days
+
+# Failed sign-ins are limited (app/services/login_limiter.py): this many wrong passwords
+# for one email from one address within the window locks that pair out until the oldest
+# failure ages out; the per-address cap is looser and stops spraying many emails.
+LOGIN_MAX_FAILURES = int(os.getenv("LOGIN_MAX_FAILURES", "5"))
+LOGIN_WINDOW_SECONDS = float(os.getenv("LOGIN_WINDOW_SECONDS", "300"))
+LOGIN_IP_MAX_FAILURES = int(os.getenv("LOGIN_IP_MAX_FAILURES", "30"))
+
+
+def parse_origins(raw: str) -> list:
+    """The comma-separated CORS_ORIGINS setting as a list of origins. A wildcard is
+    refused: the browser sends the sign-in token with credentials, and "*" would let
+    any website read the responses."""
+    origins = []
+    for item in raw.split(","):
+        origin = item.strip().rstrip("/")
+        if not origin:
+            continue
+        if origin == "*":
+            raise ValueError(
+                "CORS_ORIGINS may not contain '*': list the exact origins, such as http://localhost:3000"
+            )
+        if origin not in origins:
+            origins.append(origin)
+    return origins
+
+
+# Browser origins allowed to call the API. 3002 covers local development when 3000 is
+# already taken by another project (Next.js then picks the next free port).
+CORS_ORIGINS = parse_origins(os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3002"))

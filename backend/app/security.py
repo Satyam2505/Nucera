@@ -4,7 +4,13 @@ from typing import Optional
 import jwt
 from passlib.context import CryptContext
 
-from app.config import JWT_ALGORITHM, JWT_EXPIRE_MINUTES, JWT_SECRET_KEY
+from app.config import (
+    DEFAULT_JWT_SECRET,
+    JWT_ALGORITHM,
+    JWT_EXPIRE_MINUTES,
+    JWT_MIN_SECRET_CHARS,
+    JWT_SECRET_KEY,
+)
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -15,6 +21,20 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return _pwd_context.verify(plain_password, hashed_password)
+
+
+def normalize_email(email: str) -> str:
+    """The one form emails are compared and stored in: trimmed and lower-case."""
+    return email.strip().lower()
+
+
+def insecure_secret_problem(secret: str) -> Optional[str]:
+    """Why `secret` can't be trusted to sign tokens, or None if it is fine."""
+    if secret == DEFAULT_JWT_SECRET:
+        return "JWT_SECRET_KEY is the built-in default, which anyone can read in the source code."
+    if len(secret) < JWT_MIN_SECRET_CHARS:
+        return f"JWT_SECRET_KEY is shorter than {JWT_MIN_SECRET_CHARS} characters."
+    return None
 
 
 class InvalidTokenError(Exception):
