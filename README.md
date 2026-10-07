@@ -15,7 +15,7 @@ served by [Ollama](https://ollama.com).
 - **Course structure** — courses contain ordered modules (chapters), which
   contain ordered topics. Rename, reorder, move and delete from the course page.
 - **Study material** — upload PDF / .txt / .md (up to 20 MB) or paste text per
-  topic. Text is chunked, embedded and stored; failed ingests leave nothing behind.
+  topic. Text is chunked to fit the embedding model, embedded and stored; failed ingests leave nothing behind.
 - **Grounded tutor** — answers use only the retrieved passages of your material,
   cite source and page, adapt depth to your mastery, and flag unmastered
   prerequisites. If nothing relevant is found, it says so instead of guessing.
@@ -84,6 +84,26 @@ npm run dev
 
 App at http://localhost:3000.
 
+### Re-indexing after a chunking change
+
+Chunks used to be ~650 tokens, but the embedding model (all-MiniLM-L6-v2) reads
+only 256 tokens of each, so most of every chunk was invisible to search. Chunks
+are now ~200 tokens and always checked against the model's real tokenizer. Material
+uploaded before that is still in the old, oversized chunks; the server logs a
+warning at startup if any exist. Stop the server, then:
+
+```
+cd backend
+python reindex.py --dry-run     # see what would change
+python reindex.py               # re-chunk and re-embed
+```
+
+This rebuilds chunks from the text already stored (no re-upload needed), keeps PDF
+page numbers (rebuilt from the old chunks and checked against the stored text),
+and copies a SQLite database to `dev.db.bak-<timestamp>` first. A source whose page
+numbers can't be verified is skipped and reported; `--allow-page-loss` re-indexes
+it without them. Sources that already fit are left alone unless you pass `--force`.
+
 ### Upgrading an existing database
 
 Always back up first, then migrate:
@@ -102,7 +122,7 @@ in study sessions is kept).
 
 All settings are environment variables with working defaults; see
 `backend/.env.example` for the full list (database, JWT secret, Ollama model
-and timeouts, relevance threshold, upload limit, quiz generation).
+context window and temperature, relevance threshold, upload limit, quiz generation).
 Set `JWT_SECRET_KEY` to a real secret for anything beyond your own machine.
 
 ## Tests
@@ -124,9 +144,10 @@ the LLM is always mocked.
 backend/app/
   routers/    auth, courses, topics, ingestion (/sources), tutor (/ask),
               quiz, mastery, retrieval
-  services/   chunking, embedding, retrieval, graph, prompt builder, llm,
-              tutor, quiz, mastery, ordering
+  services/   chunking, embedding, indexing, reindex, retrieval, graph,
+              prompt builder, context budget, llm, tutor, quiz, mastery, ordering
   ownership.py  every "does this belong to the caller" lookup
+backend/reindex.py          rebuild chunks/embeddings from stored text
 backend/alembic/versions/   0001 … 0006
 frontend/app/               / (home) and /course/[courseId]
 frontend/components/course/ chat, quiz, graph, mastery, sources, module rail
