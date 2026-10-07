@@ -12,13 +12,14 @@ of this orchestration layer.
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from app.config import OLLAMA_MODEL, RETRIEVAL_RELEVANCE_THRESHOLD
+from app.config import OLLAMA_MAX_OUTPUT_TOKENS, OLLAMA_MODEL, RETRIEVAL_RELEVANCE_THRESHOLD
 from app.services import llm_service
+from app.services.context_budget import user_prompt_char_budget
 from app.services.prompt_builder import (
     SYSTEM_PROMPT,
     PrerequisiteGap,
     RetrievedContext,
-    build_user_prompt,
+    build_budgeted_prompt,
 )
 
 INSUFFICIENT_MATERIAL_MESSAGE = (
@@ -67,29 +68,39 @@ def generate_tutor_answer(
     history: optional list of {"role": "user"|"assistant", "text": str},
         oldest first — only the last few turns are used.
     """
-    # Avoid false confidence: don't call the LLM at all when the best match
-    # isn't actually relevant.
-    if not retrieved_chunks or retrieved_chunks[0]["similarity"] < RETRIEVAL_RELEVANCE_THRESHOLD:
+    # Avoid false confidence: only chunks that clear the relevance threshold
+    # are used at all. If none do, the LLM is not called. Weaker chunks that
+    # merely came back in the top few are neither shown to the model (they
+    # would only invite it to build on irrelevant text) nor cited.
+    relevant = sorted(
+        (c for c in retrieved_chunks if c["similarity"] >= RETRIEVAL_RELEVANCE_THRESHOLD),
+        key=lambda c: c["similarity"],
+        reverse=True,
+    )
+    if not relevant:
         return TutorAnswer(answer=INSUFFICIENT_MATERIAL_MESSAGE, sources=[], grounded=False)
 
     depth = explanation_depth_for_score(topic_mastery_score)
 
     context_chunks = [
         RetrievedContext(source=c["source"], page=c.get("page"), text=c["text"])
-        for c in retrieved_chunks
+        for c in relevant
     ]
     gaps = [PrerequisiteGap(name=g["name"], score=g["score"]) for g in prerequisite_gaps]
 
-    user_prompt = build_user_prompt(
+    # The prompt is sized to the model's context window so the system prompt's
+    # grounding rules are never the part that gets cut off.
+    built = build_budgeted_prompt(
         question=question,
         topic_name=topic_name,
         depth=depth,
         chunks=context_chunks,
         gaps=gaps,
         history=history,
+        max_chars=user_prompt_char_budget(SYSTEM_PROMPT, OLLAMA_MAX_OUTPUT_TOKENS),
     )
 
-    result = llm_service.generate(SYSTEM_PROMPT, user_prompt, model=OLLAMA_MODEL)
+    result = llm_service.generate(SYSTEM_PROMPT, built.text, model=OLLAMA_MODEL)
 
     if not result.ok:
         return TutorAnswer(
@@ -98,15 +109,12 @@ def generate_tutor_answer(
             grounded=False,
         )
 
-    # Citations are built from the retrieved chunks themselves, never from
-    # whatever the model happened to say — so a citation can't be fabricated.
-    # Only chunks that clear the relevance threshold are cited: the answer is
-    # gated on the best match, but a weak chunk that merely came back in the
-    # top few isn't evidence the reader should be pointed at.
+    # Citations are built from the chunks the model was actually shown, never
+    # from whatever the model happened to say — so a citation can't be
+    # fabricated, and a chunk dropped for lack of room isn't cited.
     sources = [
-        {"source": c["source"], "page": c.get("page")}
-        for c in retrieved_chunks
-        if c["similarity"] >= RETRIEVAL_RELEVANCE_THRESHOLD
+        {"source": relevant[i]["source"], "page": relevant[i].get("page")}
+        for i in built.chunks_used
     ]
 
     return TutorAnswer(answer=result.text, sources=sources, grounded=True)

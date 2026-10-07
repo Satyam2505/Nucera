@@ -1,7 +1,9 @@
 import pytest
 
-from app.config import RETRIEVAL_RELEVANCE_THRESHOLD
+from app.config import OLLAMA_MAX_OUTPUT_TOKENS, RETRIEVAL_RELEVANCE_THRESHOLD
 from app.services import llm_service
+from app.services.context_budget import estimate_tokens, prompt_token_budget, user_prompt_char_budget
+from app.services.prompt_builder import SYSTEM_PROMPT
 from app.services.tutor_service import explanation_depth_for_score, generate_tutor_answer
 
 
@@ -70,7 +72,7 @@ def test_successful_answer_carries_citations_only_from_retrieved_chunks(monkeypa
     ]
 
 
-def test_only_chunks_at_or_above_the_threshold_are_cited(monkeypatch):
+def test_only_chunks_at_or_above_the_threshold_reach_the_model_and_the_citations(monkeypatch):
     prompts = []
 
     def fake_generate(system, user, model=None):
@@ -95,8 +97,77 @@ def test_only_chunks_at_or_above_the_threshold_are_cited(monkeypatch):
 
     assert result.grounded is True
     assert result.sources == [{"source": "A.pdf", "page": 1}, {"source": "B.pdf", "page": 2}]
-    # The prompt context is unchanged: every retrieved chunk is still given to the model.
-    assert all(text in prompts[0] for text in ("Strong match", "Borderline", "Weak match", "Noise"))
+    # The model is shown exactly what is cited: the chunks below the threshold
+    # came back from search but are not given to it.
+    assert "Strong match" in prompts[0] and "Borderline" in prompts[0]
+    assert "Weak match" not in prompts[0] and "Noise" not in prompts[0]
+
+
+def test_relevant_chunks_are_sent_best_first_even_if_passed_out_of_order(monkeypatch):
+    prompts = []
+    monkeypatch.setattr(
+        llm_service,
+        "generate",
+        lambda system, user, model=None: prompts.append(user) or llm_service.LLMResult(ok=True, text="ok"),
+    )
+    retrieved = [
+        {"source": "Low.pdf", "page": 1, "text": "second best", "similarity": 0.5},
+        {"source": "High.pdf", "page": 2, "text": "best", "similarity": 0.9},
+    ]
+    result = generate_tutor_answer("Q?", retrieved, "T", 50, [])
+    assert result.sources == [{"source": "High.pdf", "page": 2}, {"source": "Low.pdf", "page": 1}]
+    assert prompts[0].index("best") < prompts[0].index("second best")
+
+
+def test_a_chunk_that_did_not_fit_the_prompt_is_not_cited(monkeypatch):
+    prompts = []
+    monkeypatch.setattr(
+        llm_service,
+        "generate",
+        lambda system, user, model=None: prompts.append(user) or llm_service.LLMResult(ok=True, text="ok"),
+    )
+    # Three chunks that each take most of the room: only the first can be sent.
+    room = user_prompt_char_budget(SYSTEM_PROMPT, OLLAMA_MAX_OUTPUT_TOKENS)
+    big = "x" * int(room * 0.7)
+    retrieved = [
+        {"source": f"{name}.pdf", "page": n, "text": f"{name} " + big, "similarity": 0.9 - n * 0.1}
+        for n, name in enumerate(["One", "Two", "Three"], start=1)
+    ]
+    result = generate_tutor_answer("Q?", retrieved, "T", 50, [])
+
+    assert result.grounded is True
+    assert "One " in prompts[0] and "Three " not in prompts[0]
+    cited = {s["source"] for s in result.sources}
+    assert "One.pdf" in cited and "Three.pdf" not in cited
+    assert len(prompts[0]) <= room
+
+
+def test_the_prompt_sent_to_the_model_fits_the_budget_with_a_huge_question_and_history(monkeypatch):
+    prompts = []
+    monkeypatch.setattr(
+        llm_service,
+        "generate",
+        lambda system, user, model=None: prompts.append((system, user)) or llm_service.LLMResult(ok=True, text="ok"),
+    )
+    retrieved = [
+        {"source": "A.pdf", "page": 1, "text": "chunk text " * 100, "similarity": 0.9},
+        {"source": "B.pdf", "page": 2, "text": "chunk text " * 100, "similarity": 0.8},
+    ]
+    history = [{"role": "user" if i % 2 == 0 else "assistant", "text": "earlier " * 500} for i in range(6)]
+    generate_tutor_answer(
+        "very long question " * 2000,
+        retrieved,
+        "T" * 255,
+        50,
+        [{"name": f"Prerequisite {i} " * 20, "score": 10} for i in range(30)],
+        history=history,
+    )
+
+    system, user = prompts[0]
+    window_tokens = prompt_token_budget(OLLAMA_MAX_OUTPUT_TOKENS)
+    assert estimate_tokens(system) + estimate_tokens(user) <= window_tokens
+    # The grounding rules are in the system prompt, which is never trimmed.
+    assert system == SYSTEM_PROMPT
 
 
 def test_the_answer_gate_still_uses_only_the_top_match(monkeypatch):
