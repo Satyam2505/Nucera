@@ -35,6 +35,78 @@ alembic upgrade head
 - Saved graph layouts reset once (now keyed by course id).
 - Optional: `python seed.py --email you@example.com` adds the sample DSA course.
 
+## Follow-up plan (from the code review) — progress
+
+One branch per phase, stacked on `main`, nothing pushed or merged.
+
+| Phase | Branch | State |
+|---|---|---|
+| 1 Retrieval and prompt correctness | `feat/phase-1-retrieval-prompts` | done, awaiting your manual check |
+| 2 Tutor experience (streaming, markdown, saved chats) | — | not started |
+| 3 Quizzes (background jobs, DB guard, history screens) | — | not started |
+| 4 Prerequisites and learning model | — | not started |
+| 5 Retrieval breadth and inputs | — | not started |
+| 6 Tooling and hardening | — | not started |
+
+### Phase 1 — what changed
+
+- **Chunks now fit the embedder.** all-MiniLM-L6-v2 reads 256 tokens; chunks were
+  ~650, so over a third (measured: median old chunk 411 tokens, ~62% visible) of
+  each was invisible to search. Chosen fix: shrink chunks to ~200 tokens (800
+  characters) and verify every chunk with the model's own tokenizer
+  (`chunking.fit_to_token_limit`, wired through `services/indexing.py`), splitting
+  further anything — maths, code, long numbers — that still overflows. Not a
+  longer-input model, because: no new download or remote-code model; MiniLM works
+  best on short passages; the 384-dim vectors and stored format stay valid; and on
+  this CPU the prompt is read at ~18 tokens/s, so a smaller chunk is also a
+  faster answer.
+- **Re-indexing.** `backend/reindex.py` rebuilds chunks and embeddings from stored
+  text (`services/reindex_service.py`), one transaction per source, idempotent,
+  `--dry-run`, backs up a SQLite file first. The server logs a warning at startup
+  while oversized chunks exist.
+  *Page numbers:* `raw_text` is all pages joined, so they can't be read from it.
+  They are rebuilt from the old chunks (a chunk never spans pages; the overlap
+  between neighbours is removed again) and the result is checked against `raw_text`
+  word for word. Sources that fail the check are skipped and reported, not guessed
+  (`--allow-page-loss` overrides). The original upload file isn't stored, so
+  re-extracting a PDF isn't possible.
+- **Explicit model options.** `OLLAMA_NUM_CTX` (4096), `OLLAMA_TEMPERATURE` (0.2),
+  `OLLAMA_MAX_OUTPUT_TOKENS` (600), `QUIZ_TEMPERATURE`, `QUIZ_TOKENS_PER_QUESTION`
+  in `config.py` and `.env.example`, sent on every request.
+- **Prompts stay inside the window.** `services/context_budget.py` (pessimistic
+  3 chars/token) and a budget-aware `prompt_builder.build_budgeted_prompt`: question,
+  topic, depth and gaps always stay; old conversation gives way first; study
+  material goes in best-first, last chunk trimmed or dropped. The quiz reserves
+  reply room per question and gives excerpts the rest; it now uses fewer whole
+  excerpts rather than cutting each short. `llm_service` warns before sending a
+  prompt over budget.
+- **Tutor sends only relevant chunks.** Chunks below `RETRIEVAL_RELEVANCE_THRESHOLD`
+  are no longer shown to the model; citations are exactly the chunks that were
+  shown (a chunk dropped for room isn't cited).
+- **Threshold re-checked, kept at 0.35.** `tests/relevance_corpus.py` (3 notes, 28
+  on-topic and 16 off-topic questions) now backs `test_relevance_threshold.py`.
+  New chunks: lowest on-topic top match 0.314, highest off-topic 0.290; at 0.35 no
+  off-topic question passes and 3 of 28 on-topic ones are refused. 0.30 would
+  separate this corpus perfectly but with a 0.01 margin, and a bigger topic (more
+  chunks to match by chance) would erode it. Under the old chunks "load factor 0.75"
+  scored 0.011.
+- Also: `OLLAMA_TIMEOUT_SECONDS` default 120 -> 300 (the first real question timed
+  out), tutor system prompt asks for ~250 words so the output cap doesn't cut
+  answers mid-sentence.
+
+### Phase 1 — things to know
+
+- **`backend/dev.db` is still on the pre-hierarchy schema** (no `topics.module_id`):
+  migrations 0005/0006 were never applied to it. Back it up and run
+  `alembic upgrade head` before starting the app on it. `reindex.py` itself only
+  needs `sources` and `chunks`, which exist in both schemas. Its one source
+  (3 small chunks) already fits, so there is nothing to re-index in it today.
+- A 4th, lower-scoring chunk from another document (0.381) was sent and cited for
+  a hash-table question. That is the threshold working as specified, but a cut-off
+  *relative to the best match* would be tighter. Not done; your call.
+- Ollama truncates an oversized prompt to about half the window and keeps only the
+  first 4 tokens, i.e. it drops the system prompt. Hence the pre-send warning.
+
 ## What was built
 
 ### feat/course-modules (5 commits)
@@ -81,6 +153,11 @@ alembic upgrade head
   stand-in model (no duplicate quiz, 409 "already in progress" handled); with
   the real model both attempts failed on the model side, as above.
 - Generated questions were valid and cited; their *quality* was not assessed.
+- Tutor answers (2026-10-07, Phase 1): prompt processing ~18 tokens/s, generation
+  ~4 tokens/s. A grounded answer with an 894-token prompt took 163 s end to end
+  (default `OLLAMA_TIMEOUT_SECONDS` of 120 had failed it). Streaming (Phase 2) will
+  make that wait readable. Real tokenization was ~4.8 chars/token on prose, so the
+  3 chars/token budget estimate is conservative.
 
 ## Known limitations and next steps
 
@@ -88,8 +165,8 @@ alembic upgrade head
    questions, or recommend a faster model / GPU. Worth deciding with real use.
 2. **In-flight generation guard is per-process** (fine for `uvicorn --reload`
    single worker). The DB constraint still protects grading data.
-3. **Tutor prompt** still receives all 5 retrieved chunks, including weak ones
-   (only citations were tightened). Chat history is client-side only.
+3. ~~Tutor prompt received all 5 retrieved chunks~~ — fixed in Phase 1.
+   Chat history is still client-side only (Phase 2).
 4. **No UI** for adding prerequisites, viewing study-session history, or
    browsing past quizzes (all stored server-side).
 5. `JWT_SECRET_KEY` has an insecure dev default — set it for anything beyond
