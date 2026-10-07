@@ -7,14 +7,25 @@ import random
 import pytest
 
 from app import models
-from app.config import QUIZ_CONTEXT_CHAR_BUDGET, QUIZ_LLM_TIMEOUT_SECONDS
+from app.config import (
+    OLLAMA_NUM_CTX,
+    QUIZ_CONTEXT_CHAR_BUDGET,
+    QUIZ_LLM_TIMEOUT_SECONDS,
+    QUIZ_TEMPERATURE,
+    QUIZ_TOKENS_PER_QUESTION,
+)
 from app.services import llm_service, quiz_service
+from app.services.chunking import MAX_CHARS as CHUNK_MAX_CHARS
+from app.services.context_budget import TEMPLATE_OVERHEAD_TOKENS, estimate_tokens
 from app.services.quiz_service import (
+    SYSTEM_PROMPT,
     Excerpt,
     ParsedQuestion,
     QuizGenerationError,
+    excerpt_char_budget,
     generate_questions,
     parse_questions,
+    quiz_output_tokens,
     select_excerpts,
     shuffle_options,
 )
@@ -196,6 +207,45 @@ def test_chunks_from_several_sources_keep_their_own_titles():
     assert [e.source for e in excerpts] == ["First", "First", "Second", "Second"]
 
 
+# --- fitting the context window --------------------------------------------------------
+
+
+def test_the_reply_cap_grows_with_the_question_count():
+    assert quiz_output_tokens(5) - quiz_output_tokens(3) == 2 * QUIZ_TOKENS_PER_QUESTION
+
+
+@pytest.mark.parametrize("count", [1, 3, 5, 10])
+def test_the_whole_quiz_prompt_fits_the_window_with_the_reply(count):
+    chunks = make_chunks(60, text="lorem ipsum dolor " * 40)  # ~720 chars, like a new chunk
+    titles = {1: "T" * 255}  # a worst-case source title on every excerpt
+    topic = "Topic " * 40
+    budget = excerpt_char_budget(topic, count)
+    excerpts = select_excerpts(chunks, titles, random.Random(0), char_budget=budget)
+    prompt = quiz_service.build_user_prompt(topic, excerpts, count)
+    used = estimate_tokens(SYSTEM_PROMPT) + estimate_tokens(prompt)
+    assert used + quiz_output_tokens(count) + TEMPLATE_OVERHEAD_TOKENS <= OLLAMA_NUM_CTX
+
+
+def test_fewer_questions_leave_more_room_for_excerpts():
+    assert excerpt_char_budget("T", 3) >= excerpt_char_budget("T", 5)
+    assert excerpt_char_budget("T", 5) <= QUIZ_CONTEXT_CHAR_BUDGET
+
+
+def test_a_tight_budget_uses_fewer_whole_excerpts_rather_than_cutting_each_short():
+    chunks = make_chunks(30, text="lorem ipsum dolor " * 44)  # ~790 chars: a full-size chunk
+    excerpts = select_excerpts(chunks, {1: "N"}, random.Random(0), char_budget=3000)
+    assert len(excerpts) == 3000 // (CHUNK_MAX_CHARS + 16)
+    assert all(len(e.text) >= 780 for e in excerpts)  # none was cut
+
+
+def test_the_titles_and_labels_count_against_the_budget():
+    chunks = make_chunks(30, text="lorem ipsum dolor " * 44)
+    titles = {1: "X" * 255}
+    excerpts = select_excerpts(chunks, titles, random.Random(0), char_budget=3000)
+    prompt = quiz_service.build_user_prompt("T", excerpts, 3)
+    assert len(prompt) <= 3000 + 200  # the budget plus the prompt's own framing
+
+
 # --- generate_questions (fake model) ---------------------------------------------------------
 
 EXCERPTS = [Excerpt(1, "Notes", 1, "text one"), Excerpt(2, "Notes", 2, "text two")]
@@ -235,6 +285,8 @@ def test_a_good_first_reply_needs_one_call_and_asks_for_json(fake_llm):
     assert len(llm.calls) == 1
     assert llm.calls[0]["json_mode"] is True
     assert llm.calls[0]["timeout"] == QUIZ_LLM_TIMEOUT_SECONDS
+    assert llm.calls[0]["temperature"] == QUIZ_TEMPERATURE
+    assert llm.calls[0]["max_output_tokens"] == quiz_output_tokens(5)
 
 
 def test_the_prompt_is_grounded_numbered_and_forbids_outside_facts(fake_llm):

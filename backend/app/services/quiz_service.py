@@ -28,11 +28,16 @@ from app.config import (
     QUIZ_MAX_EXCERPTS,
     QUIZ_MIN_VALID_QUESTIONS,
     QUIZ_QUESTION_COUNT,
+    QUIZ_TEMPERATURE,
+    QUIZ_TOKENS_PER_QUESTION,
 )
 from app.services import llm_service
+from app.services.chunking import MAX_CHARS as CHUNK_MAX_CHARS
+from app.services.context_budget import user_prompt_char_budget
 
 OPTION_KEYS = ("A", "B", "C", "D")
-# A stored chunk is ~2600 characters; no single excerpt needs more than that.
+# A new chunk is at most ~800 characters (chunking.MAX_CHARS); chunks stored
+# before chunk sizes were reduced can be up to ~2600, so the ceiling stays higher.
 MAX_EXCERPT_CHARS = 3000
 MIN_EXCERPT_CHARS = 300
 
@@ -119,7 +124,33 @@ def generation_slot(topic_id: int):
             _in_flight.discard(topic_id)
 
 
+# --- sizing the prompt to the model's context window ------------------------------
+# The window (OLLAMA_NUM_CTX) holds the system prompt, the excerpts and the reply
+# together, so the reply's room is set aside first and the excerpts get what is
+# left, up to QUIZ_CONTEXT_CHAR_BUDGET.
+
+# The JSON wrapper around the questions.
+_REPLY_OVERHEAD_TOKENS = 100
+# The topic line, "Write N questions." and the section header.
+_PROMPT_FRAMING_CHARS = 200
+
+
+def quiz_output_tokens(count: int) -> int:
+    """Reply length cap for `count` questions."""
+    return count * QUIZ_TOKENS_PER_QUESTION + _REPLY_OVERHEAD_TOKENS
+
+
+def excerpt_char_budget(topic_name: str, count: int) -> int:
+    room = user_prompt_char_budget(SYSTEM_PROMPT, quiz_output_tokens(count))
+    room -= len(topic_name) + _PROMPT_FRAMING_CHARS
+    return max(MIN_EXCERPT_CHARS, min(QUIZ_CONTEXT_CHAR_BUDGET, room))
+
+
 # --- choosing the material --------------------------------------------------------
+
+
+# The "[12] (", ", p. 123)" and newline around each excerpt, besides the title.
+_EXCERPT_LABEL_CHARS = 16
 
 
 def select_excerpts(
@@ -134,11 +165,15 @@ def select_excerpts(
     Chunks are taken in reading order (source, then position); when there are
     more than `max_excerpts`, evenly spaced ones are picked starting from a
     random offset, so each regeneration can cover different parts. The text is
-    then trimmed so the whole set fits `char_budget`.
+    then trimmed so the whole set fits `char_budget`. The budget is spent on
+    whole chunks where it can be: if it can't hold `max_excerpts` of them, fewer
+    excerpts are used rather than every one being cut short.
     """
     ordered = sorted(chunks, key=lambda c: (c.source_id, c.chunk_index))
     if not ordered:
         return []
+
+    max_excerpts = min(max_excerpts, max(1, char_budget // (CHUNK_MAX_CHARS + _EXCERPT_LABEL_CHARS)))
 
     if len(ordered) > max_excerpts:
         step = len(ordered) / max_excerpts
@@ -146,23 +181,24 @@ def select_excerpts(
         indices = sorted({min(int(offset + i * step), len(ordered) - 1) for i in range(max_excerpts)})
         ordered = [ordered[i] for i in indices]
 
-    per_excerpt = max(MIN_EXCERPT_CHARS, min(MAX_EXCERPT_CHARS, char_budget // len(ordered)))
+    label_chars = sum(
+        len(titles.get(c.source_id, "Untitled source")) + _EXCERPT_LABEL_CHARS for c in ordered
+    )
+    per_excerpt = max(
+        MIN_EXCERPT_CHARS, min(MAX_EXCERPT_CHARS, (char_budget - label_chars) // len(ordered))
+    )
     excerpts: List[Excerpt] = []
     used = 0
     for chunk in ordered:
-        room = char_budget - used
+        source = titles.get(chunk.source_id, "Untitled source")
+        room = char_budget - used - len(source) - _EXCERPT_LABEL_CHARS
         if room < MIN_EXCERPT_CHARS and excerpts:
             break
         text = _trim(chunk.chunk_text, min(per_excerpt, max(room, MIN_EXCERPT_CHARS)))
         excerpts.append(
-            Excerpt(
-                number=len(excerpts) + 1,
-                source=titles.get(chunk.source_id, "Untitled source"),
-                page=chunk.page_number,
-                text=text,
-            )
+            Excerpt(number=len(excerpts) + 1, source=source, page=chunk.page_number, text=text)
         )
-        used += len(text)
+        used += len(text) + len(source) + _EXCERPT_LABEL_CHARS
     return excerpts
 
 
@@ -313,7 +349,12 @@ def generate_questions(
 
     for _attempt in range(2):
         result = llm_service.generate(
-            SYSTEM_PROMPT, prompt, json_mode=True, timeout=QUIZ_LLM_TIMEOUT_SECONDS
+            SYSTEM_PROMPT,
+            prompt,
+            json_mode=True,
+            timeout=QUIZ_LLM_TIMEOUT_SECONDS,
+            temperature=QUIZ_TEMPERATURE,
+            max_output_tokens=quiz_output_tokens(count),
         )
         if not result.ok:
             raise QuizGenerationError(
@@ -370,7 +411,12 @@ def create_quiz_set(
     if not rows:
         raise NoMaterialError(NO_MATERIAL_MESSAGE)
     titles = {chunk.source_id: title for chunk, title in rows}
-    excerpts = select_excerpts([chunk for chunk, _ in rows], titles, rng)
+    excerpts = select_excerpts(
+        [chunk for chunk, _ in rows],
+        titles,
+        rng,
+        char_budget=excerpt_char_budget(topic.name, count),
+    )
     by_number = {e.number: e for e in excerpts}
 
     questions = generate_questions(topic.name, excerpts, count, min_valid)
