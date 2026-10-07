@@ -18,7 +18,6 @@ embedded, so a failure leaves that source exactly as it was.
 """
 
 import logging
-import re
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 

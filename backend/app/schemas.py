@@ -11,11 +11,6 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=8)
 
 
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -135,16 +130,6 @@ class SourceOut(BaseModel):
     title: str
     created_at: datetime
     chunk_count: int
-
-
-class ChunkOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    source_id: int
-    topic_id: int
-    chunk_text: str
-    chunk_index: int
-    page_number: Optional[int] = None
 
 
 class IngestTextRequest(BaseModel):

@@ -21,7 +21,6 @@ from app.services.quiz_service import (
     QUESTION_ATTEMPTS,
     SYSTEM_PROMPT,
     Excerpt,
-    ParsedQuestion,
     QuizGenerationError,
     excerpt_char_budget,
     generate_question,
@@ -273,10 +272,6 @@ def fake_llm(monkeypatch):
         return fake
 
     return install
-
-
-def valid_reply(count):
-    return reply(*[make_q(n, sources=[1, 2]) for n in range(1, count + 1)])
 
 
 def test_a_good_reply_needs_one_call_and_asks_for_json(fake_llm):

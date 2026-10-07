@@ -363,9 +363,9 @@ and `.env.example`, and the full suite run. Nothing in it was run beyond `import
 4. ~~No UI for prerequisites, session history or past quizzes~~ — all have screens now (Phases 3-4).
 5. `JWT_SECRET_KEY` has an insecure dev default — set it for anything beyond
    local use. CORS allows only localhost:3000/3002.
-6. Minor: `datetime.utcnow()` deprecation warnings in tests; unused schemas
-   `UserLogin` / `ChunkOut`; first request after startup waits for the
-   embedding model to load.
+6. Minor: `datetime.utcnow()` deprecation warnings in tests; first request after
+   startup waits for the embedding model to load. (The unused `UserLogin` /
+   `ChunkOut` schemas were removed.)
 
 ## Working conventions (for whoever picks this up)
 

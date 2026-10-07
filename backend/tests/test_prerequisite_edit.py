@@ -1,7 +1,5 @@
 """Adding prerequisites without loops, and removing them."""
 
-import pytest
-
 from app import models
 from app.services import graph_service
 from helpers import make_topic

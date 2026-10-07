@@ -4,7 +4,7 @@ import pytest
 
 from app import models
 from app.services import llm_service
-from helpers import make_course, make_module, make_topic
+from helpers import make_topic
 
 
 @pytest.fixture()
