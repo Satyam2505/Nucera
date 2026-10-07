@@ -72,6 +72,8 @@ and quiz generation returns a clear error.
 
 ### 2. Backend
 
+Python 3.12. Windows (PowerShell or cmd):
+
 ```
 cd backend
 python -m venv .venv
@@ -82,8 +84,37 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+macOS / Linux:
+
+```
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
 API at http://localhost:8000 (interactive docs at `/docs`). The first upload or
 question after startup is slower while the embedding model loads.
+
+`.env.example` sets `NUCERA_DEV=true`, which is what lets the server start on your own
+machine without a secret. The server **refuses to start** with the built-in JWT secret
+(or one under 32 characters) unless that flag is set: for anything beyond your own
+machine, remove the flag and put a real secret in `.env`:
+
+```
+python -c "import secrets; print(secrets.token_urlsafe(48))"    # then JWT_SECRET_KEY=<that>
+```
+
+Other safeguards: emails are stored and matched in lower case; after 5 wrong passwords
+for one email from one address in 5 minutes, further sign-ins from that address for that
+email are refused (HTTP 429, with `Retry-After`) until the oldest failure ages out; and
+the browsers allowed to call the API are listed in `CORS_ORIGINS` (default
+`http://localhost:3000,http://localhost:3002`; never `*`). The sign-in limit counts by the
+address the request comes from, so run the API directly rather than behind a proxy that
+hides it.
 
 Optional sample data — a "Data Structures & Algorithms" course with 4 modules
 and 10 linked topics, attached to an account you've already registered:
@@ -97,6 +128,8 @@ in `.env` (see `.env.example`).
 
 ### 3. Frontend
 
+Windows:
+
 ```
 cd frontend
 npm install
@@ -104,7 +137,16 @@ copy .env.local.example .env.local
 npm run dev
 ```
 
-App at http://localhost:3000.
+macOS / Linux:
+
+```
+cd frontend
+npm install
+cp .env.local.example .env.local
+npm run dev
+```
+
+Node 22. App at http://localhost:3000.
 
 ### Optional: OCR for scanned PDFs
 
@@ -145,9 +187,19 @@ it without them. Sources that already fit are left alone unless you pass `--forc
 
 Always back up first, then migrate:
 
+Windows:
+
 ```
 cd backend
 copy dev.db dev.db.bak
+alembic upgrade head
+```
+
+macOS / Linux:
+
+```
+cd backend
+cp dev.db dev.db.bak
 alembic upgrade head
 ```
 
@@ -158,27 +210,41 @@ in study sessions is kept). Migration 0007 adds the saved tutor conversations
 background quiz jobs and a status on quiz sets (every existing quiz stays usable).
 Migration 0009 adds the keyword search index over existing chunks (SQLite only).
 Migration 0010 adds the mastery memory model's columns; scores you have today are carried
-over unchanged and start fading from the day you upgrade.
+over unchanged and start fading from the day you upgrade. Migration 0011 lower-cases every
+email and makes them unique ignoring case; if two accounts differ only by capitalisation it
+stops before changing anything and names them, so you can delete or merge one by hand.
 
 ## Configuration
 
 All settings are environment variables with working defaults; see
 `backend/.env.example` for the full list (database, JWT secret, Ollama model
 context window and temperature, relevance threshold, upload limit, quiz generation).
-Set `JWT_SECRET_KEY` to a real secret for anything beyond your own machine.
+Set `JWT_SECRET_KEY` to a real secret for anything beyond your own machine (the server
+refuses to start without one unless `NUCERA_DEV=true`; see Setup).
 
 ## Tests
 
 ```
-cd backend && pytest
-cd frontend && npx tsc --noEmit
+cd backend
+pip install -r requirements-dev.txt     # runtime requirements plus pytest and httpx
+pytest
+
+cd frontend
+npx tsc --noEmit
+npm test                                # the plain-Node tests in lib/*.test.ts
 ```
 
-Frontend logic tests (`frontend/lib/*.test.ts`) use only Node's built-in
-`assert`; each file's header shows how to run it.
+Frontend logic tests (`frontend/lib/*.test.ts`) use only Node's built-in `assert`;
+`npm test` runs them all (`npm test -- quiz chat` runs only those files).
 
-The backend suite loads the real embedding model, so it takes a minute or two;
-the LLM is always mocked.
+The backend suite loads the real embedding model, so it takes a few minutes; the
+LLM is always mocked, so Ollama is not needed. Without the optional OCR packages one
+test that uses the real OCR engine is skipped.
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the same checks on every pull request
+and push to `main`: backend `pytest` (after checking that the migrations apply, undo and
+re-apply on an empty database) and, for the frontend, `tsc`, `npm test` and a production
+build.
 
 ## Project layout
 
@@ -190,7 +256,9 @@ backend/app/
               prompt builder, context budget, llm, tutor, quiz, mastery, ordering
   ownership.py  every "does this belong to the caller" lookup
 backend/reindex.py          rebuild chunks/embeddings from stored text
-backend/alembic/versions/   0001 … 0010
+backend/requirements*.txt   runtime, dev (tests) and optional OCR requirements
+.github/workflows/ci.yml    CI: backend pytest, frontend tsc + tests + build
+backend/alembic/versions/   0001 … 0011
 frontend/app/               / (home) and /course/[courseId]
 frontend/components/course/ chat, quiz, graph, mastery, sources, module rail
 frontend/lib/               API client, app state, pure helpers + tests

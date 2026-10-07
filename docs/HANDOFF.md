@@ -46,7 +46,7 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
 | 3 Quizzes (background jobs, DB guard, history screens) | `feat/phase-3-quizzes` (on top of phase 2) | done, awaiting your manual check |
 | 4 Prerequisites and learning model | prerequisites: merged to `main`. Mastery model: `feat/mastery-model` (not merged) | **mastery model built with my recommended defaults** because you did not answer the questions: read the table at the end of `docs/mastery-model-proposal.md` |
 | 5 Retrieval breadth and inputs | `feat/phase-5-retrieval-inputs` (on top of phase 4) | done, awaiting your manual check |
-| 6 Tooling and hardening | — | **not started as a branch.** A first, untested draft of the auth half is in `git stash` (`stash@{0}`, see below) |
+| 6 Tooling and hardening | `feat/phase-6-hardening` (on top of the mastery model) | done, awaiting your check |
 
 ### Phase 1 — what changed
 
@@ -244,53 +244,46 @@ One branch per phase, stacked on `main`, nothing pushed or merged.
 - OCR is the slow path of an upload; a 30-page scan can take a couple of minutes with no
   progress shown. Not streamed or backgrounded yet.
 
-### Phase 6 — where it was left
+### Phase 6 — what changed (branch `feat/phase-6-hardening`)
 
-Not done: CI workflow, requirements split (dev vs runtime), macOS/Linux README steps, and
-the auth items. A draft of the auth half was written and then shelved untested with
-`git stash` (on top of `feat/phase-5-retrieval-inputs`; `git stash list` shows it, `git
-stash show -p` shows it, `git stash pop` brings it back). What it contains:
+- **CI** (`.github/workflows/ci.yml`): backend `pytest` (CPU-only torch installed first so the
+  runner doesn't download CUDA wheels; the embedding model cached; `pip check`; migrations
+  upgrade -> downgrade to base -> upgrade on an empty database), frontend `tsc --noEmit`,
+  `npm test`, `npm run build`. I could not run GitHub Actions from here: the YAML parses, the
+  migration round trip and `next build` were run locally, but the first real CI run may need
+  small fixes (most likely the torch install or cache path).
+- **`npm test`**: `frontend/scripts/test-lib.mjs` runs every `lib/*.test.ts` (it adds the `.ts`
+  extensions Node needs to a temporary copy); exits non-zero if any file fails (checked with a
+  deliberately failing test). Replaces the `sed` incantations in the old file headers.
+- **Requirements split**: `requirements.txt` is runtime only (pytest and httpx moved out),
+  `requirements-dev.txt` adds them, `requirements-ocr.txt` stays optional.
+- **README**: macOS/Linux commands next to the Windows ones, the auth notes, tests and CI.
+- **Auth hardening**:
+  - The server **refuses to start** (clear message, exit code 3) with the built-in JWT secret or
+    one under 32 characters, unless `NUCERA_DEV=true`, which only turns it into a warning.
+    Verified with the real server. `.env.example` now sets `NUCERA_DEV=true`, so
+    `copy .env.example .env` still works locally; **anyone upgrading with an old `.env` will hit
+    the refusal and must set a secret or the flag.**
+  - **Emails are lower-case**: stored trimmed and lower-case, matched case-insensitively (old rows
+    with capitals still sign in), duplicates in another case refused. Migration 0011 lower-cases
+    existing rows and adds a unique index on `lower(email)`; if two accounts differ only by
+    capitalisation it stops before changing anything and names them (tested).
+  - **Login rate limit** (`services/login_limiter.py`): 5 failures per (address, email) per 5
+    minutes, plus 30 per address; blocked attempts get 429 + `Retry-After`; unknown emails are
+    limited identically (no account enumeration); a success clears that pair; capitalisation can't
+    dodge it. In memory, per process.
+  - **CORS** from `CORS_ORIGINS` (comma separated; `*` refused at startup); `main.create_app()` is
+    now a factory so this is testable.
+- Verified: new tests for each item (`test_auth_hardening.py`, `test_migration_0011.py`), the
+  full suite, and the real server started with and without a secret.
 
-- `app/main.py` becomes an app factory (`create_app`) and refuses to start when
-  `JWT_SECRET_KEY` is the built-in default or under 32 characters, unless `NUCERA_DEV=true`.
-- Emails normalised to lower case (`security.normalize_email`, a case-insensitive lookup
-  for old rows, a functional unique index `uq_users_email_lower` in the model).
-- `services/login_limiter.py`: in-memory failed-login limit per (address, email) plus a
-  looser per-address cap, with a 429 and `Retry-After`; wired into `/auth/login`.
-- `CORS_ORIGINS` setting (comma separated, `*` refused).
+### Phase 6 — things to know
 
-Still missing before that draft is usable: **migration 0010** (lower-case existing emails,
-refusing with a clear message if two accounts differ only by capitalisation, then create the
-index) and its test, tests for everything above, `NUCERA_DEV=true` set in `tests/conftest.py`
-and `.env.example`, and the full suite run. Nothing in it was run beyond `import app.main`.
-
-### Phase 4 — the mastery model (branch `feat/mastery-model`, built on the cleanup branch)
-
-- **Model** (`services/mastery_model.py`, pure, tested against hand-worked numbers): per topic
-  `estimate` (0-1), `stability_days` (memory half-life, 3 to start) and `last_reviewed_at`; the
-  score shown is `100 x estimate x 0.5^(days since review / stability)`. A quiz of n questions
-  has weight n/(n+3); a pass lengthens the half-life in proportion to how much had faded; a fail
-  shortens it (never below 1 day); a topic is due below 80% retrievability.
-- **One central hook** (`models.py`): whenever a `Mastery` row is loaded or refreshed, its
-  `score`/`status` are set to the faded values as *committed* values, so every existing read path
-  (graph, course tree, course average, tutor prerequisite gaps, the API) sees the faded score,
-  nothing is written back by reading, and the stored column is just the score at the last review.
-  A row with no `last_reviewed_at` is left exactly as stored.
-- **All score changes go through `mastery_service`**: `record_quiz` (graded quizzes; the quiz's
-  `score_delta` is now the change in the score the student saw), `override_score` (`PUT /mastery`:
-  a fresh review), `apply_score_delta` (self-reports: not a review).
-- **Behaviour change you will notice:** quiz scores move differently. 5 of 5 on a new topic is
-  now 62 (weight 5/8), not +10 on the old scale, and a perfect quiz needs a second one to reach
-  "mastered". The old fixed formula `round((percent - 50) / 5)` is gone.
-- **Migration 0010** (+ test): three columns; existing scores carried over, clock starting at the
-  migration so nothing fades on upgrade day. The Phase 6 auth draft in `git stash` has its own
-  migration for lower-casing emails: it must be renumbered to **0011** when it is revived.
-- **"What to study next"**: `GET /courses/{id}/next?limit=` (`services/study_next.py`): reviews
-  first, then ready topics, each with a reason; shown at the top of the Mastery tab with a
-  "Review with a quiz" / "Start with the tutor" button, and a "Due for review" note in the
-  module list. `MasteryOut` gained `last_reviewed_at` and `due_for_review`.
-- Verified: model, hook, services, API, migration and ranking tests; headless browser check of
-  the Mastery tab with a topic aged three days in the database.
+- The limiter keys on the connecting address (`request.client.host`). Behind a reverse proxy every
+  request looks like the proxy's address; there is no `X-Forwarded-For` handling on purpose
+  (trusting it blindly would let anyone dodge the limit).
+- The limit is in memory: restarting the server clears it, and several workers would each count
+  separately. Fine for the single-process local app.
 
 ### Phase 4 — things to know
 
