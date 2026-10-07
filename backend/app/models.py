@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
     text,
 )
 from sqlalchemy import Enum as SQLEnum
@@ -45,6 +46,9 @@ class SessionType(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
+    # One account per address regardless of capitalisation (emails are stored lower-case;
+    # this also stops two rows that differ only in case from ever existing).
+    __table_args__ = (Index("uq_users_email_lower", func.lower(text("email")), unique=True),)
 
     id = Column(Integer, primary_key=True)
     email = Column(String(255), unique=True, nullable=False, index=True)

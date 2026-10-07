@@ -49,3 +49,9 @@ def test_seed_with_unknown_email_exits_without_creating_anything(db_session):
     with pytest.raises(SystemExit):
         seed.seed(email="nobody@example.com")
     assert _counts(db_session)["courses"] == 0
+
+
+def test_seed_finds_the_account_whatever_capitalisation_is_typed(client, db_session):
+    seed.seed(email="  TEST-User@Example.COM ")  # the account is test-user@example.com
+    courses = client.get("/courses").json()
+    assert [c["name"] for c in courses] == [seed.COURSE_NAME]

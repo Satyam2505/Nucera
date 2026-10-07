@@ -4,11 +4,19 @@ from typing import Annotated, List, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, field_validator
 
 from app.models import MasteryStatus, SessionType, SourceType
+from app.security import normalize_email
 
 
 class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
+
+    @field_validator("email")
+    @classmethod
+    def _lower_case_email(cls, value: str) -> str:
+        # Email addresses are matched without regard to capitalisation everywhere
+        # (see normalize_email), so they are stored in one form.
+        return normalize_email(value)
 
 
 class UserOut(BaseModel):

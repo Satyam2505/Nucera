@@ -2,8 +2,11 @@ import argparse
 import sys
 from typing import Optional
 
+from sqlalchemy import func
+
 from app import models
 from app.database import Base, SessionLocal, engine
+from app.security import normalize_email
 
 COURSE_NAME = "Data Structures & Algorithms"
 COURSE_DESCRIPTION = "Core data structures and the algorithms that operate on them."
@@ -66,7 +69,12 @@ def seed(email: Optional[str] = None):
     try:
         owner_id = None
         if email:
-            user = db.query(models.User).filter(models.User.email == email).first()
+            # Emails are matched without regard to capitalisation, as at sign-in.
+            user = (
+                db.query(models.User)
+                .filter(func.lower(models.User.email) == normalize_email(email))
+                .first()
+            )
             if user is None:
                 sys.exit(f"No account with email {email!r}. Register it first, then re-run.")
             owner_id = user.id
