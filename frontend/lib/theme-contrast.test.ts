@@ -269,7 +269,7 @@ for (const theme of THEMES) {
   });
 }
 
-test("every light token exists in the dark themes; the only dark-only tokens are the stone-gray remaps", () => {
+test("every light token exists in the dark themes; dark themes add no tokens of their own", () => {
   const theme = parseThemeCss(CSS);
   const light = themeVariables(theme, "light");
   const dark = themeVariables(theme, "dark");
@@ -278,7 +278,7 @@ test("every light token exists in the dark themes; the only dark-only tokens are
   assert.deepEqual(names(light).filter((n) => !dark.has(n)), []);
   assert.deepEqual(
     names(dark).filter((n) => !light.has(n)),
-    ["--color-stone-300", "--color-stone-400", "--color-stone-500"]
+    []
   );
 });
 

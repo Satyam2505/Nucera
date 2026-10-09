@@ -192,12 +192,6 @@
   --sidebar-accent: #111827;
   --sidebar-accent-foreground: var(--ink);
   --sidebar-border: #1f2937;
-
-  /* Tailwind's default stone grays are warm; dark mode's secondary text
-     (text-stone-400 etc.) should be the palette's cool muted grays. */
-  --color-stone-300: #d1d5db;
-  --color-stone-400: #9ca3af;
-  --color-stone-500: #6b7280;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -262,12 +256,6 @@
     --sidebar-accent: #111827;
     --sidebar-accent-foreground: var(--ink);
     --sidebar-border: #1f2937;
-
-    /* Tailwind's default stone grays are warm; dark mode's secondary text
-       (text-stone-400 etc.) should be the palette's cool muted grays. */
-    --color-stone-300: #d1d5db;
-    --color-stone-400: #9ca3af;
-    --color-stone-500: #6b7280;
   }
 }
 
