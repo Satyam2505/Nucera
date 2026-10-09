@@ -5,6 +5,7 @@ backend/.venv/
 backend/venv/
 backend/.env
 backend/dev.db
+backend/dev.db.bak*
 backend/tests/test.db
 
 ## Node / Next.js
