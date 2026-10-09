@@ -79,13 +79,13 @@ function TopicNode({ data }: NodeProps<TopicNodeData>) {
       <p className="line-clamp-2 text-[13px] font-medium leading-snug text-[var(--ink)]">{data.name}</p>
 
       <div>
-        <div className="flex items-center gap-1.5 text-[11px] text-[var(--ink)]/70">
+        <div className="flex items-center gap-1.5 text-[11px] text-fg-secondary">
           {path ? <PathIcon state={path} /> : <StatusIcon status={status} />}
           <span className="truncate">
             {path ? PATH_LABEL[path] : STATUS_LABEL[status]}
             {!path && status !== "unmastered" ? ` · ${score}%` : ""}
           </span>
-          <span className="ml-auto shrink-0 text-[10px] tabular-nums text-[var(--ink)]/50" title={data.moduleName}>
+          <span className="ml-auto shrink-0 text-[10px] tabular-nums text-fg-tertiary" title={data.moduleName}>
             M{data.moduleNumber}
           </span>
         </div>

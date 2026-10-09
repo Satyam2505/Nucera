@@ -37,15 +37,15 @@ export default function GraphTopicList({ topics, selectedId, onSelect }: Props) 
   return (
     <section aria-label="Topics in this course" className="mx-auto w-full max-w-3xl px-4 py-8 md:px-6">
       <h2 className="text-sm font-semibold text-[var(--ink)]">Topics in this course</h2>
-      <p className="mt-1 text-xs text-[var(--ink)]/60">Grouped by your learning path. Pick one to find it on the map.</p>
+      <p className="mt-1 text-xs text-fg-tertiary">Grouped by your learning path. Pick one to find it on the map.</p>
 
       <div className="mt-5 space-y-5">
         {groups.map(({ state, items }) => (
           <div key={state}>
-            <h3 className="flex items-center gap-1.5 text-xs font-medium text-[var(--ink)]/70">
+            <h3 className="flex items-center gap-1.5 text-xs font-medium text-fg-secondary">
               <PathIcon state={state} />
               {PATH_LABEL[state]}
-              <span className="text-[var(--ink)]/40">· {items.length}</span>
+              <span className="text-fg-tertiary">· {items.length}</span>
             </h3>
             <ul className="mt-2 divide-y divide-[rgba(var(--ink-rgb),0.08)] overflow-hidden rounded-xl border border-[rgba(var(--ink-rgb),0.10)] bg-[var(--bg-surface)]">
               {items.map((t) => {
@@ -64,9 +64,9 @@ export default function GraphTopicList({ topics, selectedId, onSelect }: Props) 
                       <StatusIcon status={status} size={14} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[var(--ink)]">{t.name}</span>
-                        <span className="block truncate text-[11px] text-[var(--ink)]/50">{t.moduleName}</span>
+                        <span className="block truncate text-[11px] text-fg-tertiary">{t.moduleName}</span>
                       </span>
-                      <span className="shrink-0 text-xs tabular-nums text-[var(--ink)]/60">
+                      <span className="shrink-0 text-xs tabular-nums text-fg-tertiary">
                         {STATUS_LABEL[status]}
                         {status !== "unmastered" ? ` · ${Math.round(t.score)}%` : ""}
                       </span>

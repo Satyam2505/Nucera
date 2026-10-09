@@ -603,7 +603,7 @@ function GraphCanvas({
           keeps normal scrolling; the topic list below is the rest of the page. */}
       <div ref={mapSectionRef} className="flex h-[clamp(440px,calc(100dvh-15rem),780px)] flex-col">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[rgba(var(--ink-rgb),0.10)] px-4 py-2.5 text-xs md:px-6">
-          <ul className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[var(--ink)]/70" aria-label="Legend">
+          <ul className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-fg-secondary" aria-label="Legend">
             {pathMode
               ? PATH_ORDER.map((p) => (
                   <li key={p} className="flex items-center gap-1.5">
@@ -633,7 +633,7 @@ function GraphCanvas({
                       className={`flex max-w-44 items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--accent-rgb),0.45)] ${
                         shown
                           ? "border-[rgba(var(--ink-rgb),0.18)] text-[var(--ink)]"
-                          : "border-dashed border-[rgba(var(--ink-rgb),0.18)] text-[var(--ink)]/45 line-through"
+                          : "border-dashed border-[rgba(var(--ink-rgb),0.18)] text-fg-tertiary line-through"
                       }`}
                     >
                       <span
@@ -651,7 +651,7 @@ function GraphCanvas({
           )}
 
           <div className="ml-auto flex items-center gap-1.5">
-            <span className="mr-2 hidden text-[11px] text-[var(--ink)]/45 xl:inline">
+            <span className="mr-2 hidden text-[11px] text-fg-tertiary xl:inline">
               Drag cards to move · double-click a topic to focus
             </span>
             {focusId !== null && (
@@ -667,7 +667,7 @@ function GraphCanvas({
               className={`h-7 rounded-lg px-3 text-xs ${
                 pathMode
                   ? "border-[var(--accent)] bg-[rgba(var(--accent-rgb),0.12)] text-[var(--accent-hover)]"
-                  : "text-[var(--ink)]/70"
+                  : "text-fg-secondary"
               }`}
             >
               Learning path
@@ -676,13 +676,13 @@ function GraphCanvas({
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-7 px-2 text-xs text-[var(--ink)]/70"
+                className="h-7 px-2 text-xs text-fg-secondary"
                 onClick={resetLayout}
               >
                 Reset layout
               </Button>
             ) : (
-              <span className="flex h-7 items-center gap-1 px-2 text-[11px] text-[var(--ink)]/45">
+              <span className="flex h-7 items-center gap-1 px-2 text-[11px] text-fg-tertiary">
                 <Check size={12} aria-hidden /> Default layout
               </span>
             )}
