@@ -61,6 +61,24 @@
   --warn-bg: rgba(201, 134, 15, 0.12);
   --warn-border: rgba(201, 134, 15, 0.25);
 
+  /* --- Text tiers ---
+     --ink is body text. Anything quieter (captions, hints, meta lines, empty
+     states) uses these instead of opacity or a stone gray, so its contrast is a
+     property of the token. Each clears 4.5:1 on every surface it sits on
+     (page, cards, inputs, muted fills, hover tints); lib/theme-contrast.test.ts
+     checks that for both themes and for the OS-dark fallback below. */
+  --text-secondary: #4b5266;
+  --text-tertiary: #586075;
+  --text-placeholder: #667085;
+
+  /* Status colours used as TEXT (STATUS_TEXT_COLOR in lib/status-colors.ts).
+     --status-* above stay for borders, dots and fills; amber and unmastered are
+     below 4.5:1 as text in light mode, so text gets its own, darker values. */
+  --status-mastered-text: #2f6a2b;
+  --status-in-progress-text: var(--warn-text);
+  --status-unmastered-text: #5c5849;
+  --status-missed-text: var(--error-text);
+
   /* --- shadcn semantic bridge ---
      Every one of these is either a direct alias of a token above (so it
      inherits that token's own light/dark switch automatically — no
@@ -69,7 +87,7 @@
      --input, and shadcn's own neutral "--accent" hover tint, which is a
      different color to our BRAND --accent and deliberately given its own
      variable name so the two never collide), built from `--ink-rgb` /
-     `--status-unmastered`, which are themselves already theme-aware. */
+     `--text-tertiary`, which are themselves already theme-aware. */
   --background: var(--bg-page);
   --foreground: var(--ink);
   --card: var(--bg-surface);
@@ -85,7 +103,7 @@
   --secondary: #eef0f5;
   --secondary-foreground: var(--ink);
   --muted: #eef0f5;
-  --muted-foreground: var(--status-unmastered);
+  --muted-foreground: var(--text-tertiary);
   --shadcn-accent-bg: rgba(var(--ink-rgb), 0.08);
   --shadcn-accent-fg: var(--ink);
   --destructive: var(--error-text);
@@ -106,6 +124,9 @@
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: rgba(255, 255, 255, 0.12);
   --sidebar-ring: var(--accent);
+  /* Quieter text on the rail (replaces text-sidebar-foreground/70 and the like). */
+  --sidebar-text-secondary: #c9cde0;
+  --sidebar-text-tertiary: #a9b0c6;
 }
 
 :root[data-theme="dark"] {
@@ -140,12 +161,20 @@
   --status-unmastered-fill: #1f2937;
   --status-missed-fill: #450a0a;
 
-  --error-text: #ef4444;
+  /* Raised from #ef4444: that is 4.29:1 on --error-bg and 3.90:1 on inputs. */
+  --error-text: #f87171;
   --error-bg: #450a0a;
   --error-border: rgba(239, 68, 68, 0.35);
   --warn-text: #f59e0b;
   --warn-bg: #451a03;
   --warn-border: rgba(245, 158, 11, 0.3);
+
+  --text-secondary: #d1d5db;
+  --text-tertiary: #9ca3af;
+  --text-placeholder: #8b93a1;
+  /* In-progress and missed text follow --warn-text / --error-text (see :root). */
+  --status-mastered-text: #4ade80;
+  --status-unmastered-text: #9ca3af;
 
   /* shadcn slots: borders/inputs use the palette's single border tone, and
      secondary/muted/hover use the raised surface step. */
@@ -202,12 +231,20 @@
     --status-unmastered-fill: #1f2937;
     --status-missed-fill: #450a0a;
 
-    --error-text: #ef4444;
+    /* Raised from #ef4444: that is 4.29:1 on --error-bg and 3.90:1 on inputs. */
+    --error-text: #f87171;
     --error-bg: #450a0a;
     --error-border: rgba(239, 68, 68, 0.35);
     --warn-text: #f59e0b;
     --warn-bg: #451a03;
     --warn-border: rgba(245, 158, 11, 0.3);
+
+    --text-secondary: #d1d5db;
+    --text-tertiary: #9ca3af;
+    --text-placeholder: #8b93a1;
+    /* In-progress and missed text follow --warn-text / --error-text (see :root). */
+    --status-mastered-text: #4ade80;
+    --status-unmastered-text: #9ca3af;
 
     /* shadcn slots: borders/inputs use the palette's single border tone, and
        secondary/muted/hover use the raised surface step. */
@@ -266,6 +303,14 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* text-fg-secondary, text-fg-tertiary, placeholder:text-fg-placeholder,
+     text-sidebar-fg-secondary, text-sidebar-fg-tertiary */
+  --color-fg-secondary: var(--text-secondary);
+  --color-fg-tertiary: var(--text-tertiary);
+  --color-fg-placeholder: var(--text-placeholder);
+  --color-sidebar-fg-secondary: var(--sidebar-text-secondary);
+  --color-sidebar-fg-tertiary: var(--sidebar-text-tertiary);
 }
 
 @layer base {

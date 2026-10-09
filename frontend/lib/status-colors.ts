@@ -30,6 +30,18 @@ export const STATUS_FILL: Record<MasteryStatusKey, string> = {
   missed: "var(--status-missed-fill)",
 };
 
+// The status colours for TEXT (labels, headings, numbers). STATUS_COLOR is for
+// borders, dots and icons: it is too light to read as text on the light theme.
+// These resolve to separate, theme-aware tokens (globals.css) whose contrast on the
+// surfaces they sit on is checked by lib/theme-contrast.test.ts. Components move
+// from STATUS_COLOR to this where a status colour is used as text.
+export const STATUS_TEXT_COLOR: Record<MasteryStatusKey, string> = {
+  mastered: "var(--status-mastered-text)",
+  in_progress: "var(--status-in-progress-text)",
+  unmastered: "var(--status-unmastered-text)",
+  missed: "var(--status-missed-text)",
+};
+
 export const STATUS_LABEL: Record<MasteryStatusKey, string> = {
   mastered: "Mastered",
   in_progress: "In progress",
