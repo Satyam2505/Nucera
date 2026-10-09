@@ -45,7 +45,16 @@ import {
   type PathState,
 } from "@/lib/graph-model";
 import { groupNodesByModule, moduleTintIndex, tintFor, visibleNodes } from "@/lib/graph-modules";
-import { anyRectVisible, clampZoom, rectFits, revealDelta, unionRects, type Rect } from "@/lib/graph-viewport";
+import {
+  anyRectVisible,
+  clampZoom,
+  fitViewport,
+  readableFitViewport,
+  rectFits,
+  revealDelta,
+  unionRects,
+  type Rect,
+} from "@/lib/graph-viewport";
 import { STATUS_COLOR, STATUS_LABEL, type MasteryStatusKey } from "@/lib/status-colors";
 
 import { GraphUiContext, type GraphUi } from "./graph/graph-context";
@@ -72,6 +81,10 @@ const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 1.75;
 const ZOOM_STEP = 0.15;
 const FIT_OPTIONS = { padding: 0.08, maxZoom: 1.1 } as const;
+// The default view fits the whole graph, but not below this zoom: a graph that is
+// many columns wide and one row tall would otherwise shrink to unreadable labels on
+// a narrow canvas. "Fit graph to view" still fits everything; the rest is panned to.
+const READABLE_FIT_ZOOM = 0.75;
 // One duration for every programmatic camera move (fit, focus, reset, zoom
 // buttons, revealing a selected topic) so the graph feels consistent.
 const ANIM_MS = 320;
@@ -193,6 +206,10 @@ function GraphCanvas({
   });
   const [customized, setCustomized] = useState(() => loadLayout(courseId) !== null);
   const [viewportSaved, setViewportSaved] = useState(initialViewport !== null);
+  // With no saved camera the cards first render at React Flow's 100% default; the canvas
+  // stays hidden (laid out, so the cards still get measured) until the default view is
+  // applied, so that wrong-zoom frame is never painted. A saved camera needs no wait.
+  const [cameraReady, setCameraReady] = useState(initialViewport !== null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [focusId, setFocusId] = useState<number | null>(null);
@@ -308,6 +325,34 @@ function GraphCanvas({
 
   useEffect(() => () => window.clearTimeout(settleTimerRef.current), []);
 
+  // The default camera (first open, or after a stale saved camera is discarded): the
+  // whole graph, unless that would fall below READABLE_FIT_ZOOM. Returns false until
+  // React Flow is ready and every card has been measured, like fitView itself, so
+  // callers retry on the next frame. Reads only refs, so it is safe from any closure.
+  const applyDefaultView = useCallback((): boolean => {
+    const rf = flowRef.current;
+    const el = canvasRef.current;
+    if (!rf.viewportInitialized || !el || el.clientWidth === 0 || el.clientHeight === 0) return false;
+    const measured = rf.getNodes();
+    if (measured.length === 0 || !measured.every((n) => n.width && n.height)) return false;
+    const bounds = unionRects(
+      nodesRef.current.map((n) => ({
+        left: n.position.x,
+        top: n.position.y,
+        right: n.position.x + NODE_WIDTH,
+        bottom: n.position.y + NODE_HEIGHT,
+      }))
+    );
+    const canvas = { width: el.clientWidth, height: el.clientHeight };
+    if (fitViewport(bounds, canvas, FIT_OPTIONS).zoom >= READABLE_FIT_ZOOM) {
+      return rf.fitView({ ...FIT_OPTIONS, duration: 0 });
+    }
+    rf.setViewport(readableFitViewport(bounds, canvas, { ...FIT_OPTIONS, minReadableZoom: READABLE_FIT_ZOOM }), {
+      duration: 0,
+    });
+    return true;
+  }, []);
+
   const fitAll = useCallback(() => {
     afterLayout(() => {
       fitView({ ...FIT_OPTIONS, duration: duration(ANIM_MS) });
@@ -407,13 +452,47 @@ function GraphCanvas({
     let tries = 0;
     let frame = 0;
     const attempt = () => {
-      // fitView returns false until React Flow has measured the nodes.
-      if (flowRef.current.fitView({ ...FIT_OPTIONS, duration: 0 }) || ++tries > 30) return;
+      // Returns false until React Flow has measured the nodes.
+      if (applyDefaultView() || ++tries > 30) return;
       frame = requestAnimationFrame(attempt);
     };
     frame = requestAnimationFrame(attempt);
     return () => cancelAnimationFrame(frame);
     // Mount-only: validates the camera restored at startup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // First open with no saved camera: apply the default view once the cards are measured.
+  useEffect(() => {
+    if (initialViewport) return;
+    let tries = 0;
+    let settle = 0;
+    let frame = 0;
+    // The camera before it was applied; React Flow moves it a frame after the call
+    // returns, so the canvas is only revealed once the camera has actually changed.
+    let before: Viewport | null = null;
+    const attempt = () => {
+      const rf = flowRef.current;
+      if (before === null) {
+        const current = rf.getViewport();
+        if (applyDefaultView()) before = current;
+        else if (++tries > 60) {
+          // Never leave the graph hidden if the cards cannot be measured.
+          setCameraReady(true);
+          return;
+        }
+      } else {
+        const now = rf.getViewport();
+        if (now.x !== before.x || now.y !== before.y || now.zoom !== before.zoom || ++settle > 5) {
+          setCameraReady(true);
+          return;
+        }
+      }
+      frame = requestAnimationFrame(attempt);
+    };
+    frame = requestAnimationFrame(attempt);
+    return () => cancelAnimationFrame(frame);
+    // Mount-only, like the saved-camera check above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -693,6 +772,7 @@ function GraphCanvas({
           <div
             ref={canvasRef}
             className="relative min-h-0 min-w-0 flex-1 select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgba(var(--accent-rgb),0.45)]"
+            style={cameraReady ? undefined : { opacity: 0, pointerEvents: "none" }}
             tabIndex={0}
             onKeyDown={onKeyDown}
             onDoubleClick={onCanvasDoubleClick}
@@ -748,7 +828,6 @@ function GraphCanvas({
                 minZoom={MIN_ZOOM}
                 maxZoom={MAX_ZOOM}
                 defaultViewport={initialViewport ?? undefined}
-                fitView={initialViewport === null}
                 fitViewOptions={FIT_OPTIONS}
               >
                 <Background color="rgba(var(--ink-rgb), 0.14)" gap={20} />
