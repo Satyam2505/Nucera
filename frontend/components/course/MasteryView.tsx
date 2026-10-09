@@ -199,7 +199,7 @@ function ModuleCard({ index, module }: { index: number; module: ModuleEntries })
                     style={{ background: STATUS_COLOR[status] }}
                     aria-hidden
                   />
-                  <span className="truncate">{topic.name}</span>
+                  <span className="min-w-0 break-words sm:truncate">{topic.name}</span>
                 </span>
                 <span className="text-xs text-fg-tertiary shrink-0">
                   {note && <span className="mr-2 text-[var(--warn-text)]">{note}</span>}

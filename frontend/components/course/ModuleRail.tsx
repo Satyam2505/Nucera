@@ -247,8 +247,9 @@ export default function ModuleRail({
                     <div key={topic.id} className="flex items-center gap-1 group">
                       <button
                         onClick={() => onSelectTopic(topic.id)}
+                        title={topic.name}
                         aria-current={active ? "true" : undefined}
-                        className={`flex-1 min-w-0 flex items-center gap-2.5 rounded-lg pl-7 pr-3 py-2 text-left text-sm transition border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring ${
+                        className={`flex-1 min-w-0 flex items-center gap-2 rounded-lg pl-7 pr-2 py-2 text-left text-sm transition border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring ${
                           active
                             ? "bg-[rgba(var(--accent-rgb),0.18)] text-white border-[rgba(var(--accent-rgb),0.4)]"
                             : "text-sidebar-fg-secondary hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border-transparent"
@@ -259,7 +260,7 @@ export default function ModuleRail({
                           style={{ background: STATUS_COLOR[status] }}
                           aria-hidden
                         />
-                        <span className="truncate">{topic.name}</span>
+                        <span className="line-clamp-2 break-words">{topic.name}</span>
                       </button>
                       <button
                         onClick={() => onToggleRevision(topic.id)}
