@@ -305,6 +305,7 @@ export const REQUIREMENTS: TextRequirement[] = [
   { text: "--sidebar-foreground", on: RAIL, min: AA_NORMAL_TEXT },
   { text: "--sidebar-text-secondary", on: RAIL, min: AA_NORMAL_TEXT },
   { text: "--sidebar-text-tertiary", on: RAIL, min: AA_NORMAL_TEXT },
+  { text: "--sidebar-error-text", on: RAIL, min: AA_NORMAL_TEXT },
   { text: "--status-mastered-text", on: [...BODY, ...fills("mastered")], min: AA_NORMAL_TEXT },
   { text: "--status-in-progress-text", on: [...BODY, ...fills("in-progress")], min: AA_NORMAL_TEXT },
   { text: "--status-unmastered-text", on: [...BODY, ...fills("unmastered")], min: AA_NORMAL_TEXT },

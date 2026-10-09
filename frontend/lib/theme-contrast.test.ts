@@ -127,7 +127,7 @@ test("a colour the checker cannot read is an error, never a pass", () => {
 });
 
 test("an unreadable value in the real css is reported with the token it belongs to", () => {
-  const bad = mutate(CSS, "--text-secondary: #4b5266;", "--text-secondary: oklch(0.4 0.02 260);");
+  const bad = mutate(CSS, "--text-secondary: #3c4356;", "--text-secondary: oklch(0.4 0.02 260);");
   assert.throws(() => measure(bad, "light"), /--text-secondary: Unsupported colour value "oklch/);
 });
 
@@ -312,6 +312,7 @@ test("the Tailwind utilities map to the right tokens, and those tokens exist", (
     "--color-fg-placeholder": "--text-placeholder",
     "--color-sidebar-fg-secondary": "--sidebar-text-secondary",
     "--color-sidebar-fg-tertiary": "--sidebar-text-tertiary",
+    "--color-sidebar-error": "--sidebar-error-text",
   };
   for (const [utility, token] of Object.entries(mappings)) {
     assert.match(CSS, new RegExp(`${utility}:\\s*var\\(${token}\\)\\s*;`), `${utility} is not mapped to ${token}`);

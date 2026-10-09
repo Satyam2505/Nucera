@@ -44,9 +44,9 @@ export default function AccountMenu() {
           </Avatar>
           <span className="min-w-0 flex-1 text-left">
             <span className="block text-sm font-medium text-sidebar-foreground truncate">{user?.email}</span>
-            <span className="block text-[11px] text-sidebar-foreground/70 truncate">Signed in</span>
+            <span className="block text-[11px] text-sidebar-fg-tertiary truncate">Signed in</span>
           </span>
-          <span className="text-sidebar-foreground/70 shrink-0">
+          <span className="text-sidebar-fg-secondary shrink-0">
             <ChevronIcon />
           </span>
         </SidebarMenuButton>

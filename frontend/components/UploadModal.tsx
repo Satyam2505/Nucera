@@ -23,7 +23,7 @@ import { groupTopicsByModule } from "@/lib/courses";
 const SOURCE_TYPES = ["official_upload", "self_supplied", "web_fallback"];
 
 const inputClass =
-  "linen text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus-visible:ring-[rgba(var(--accent-rgb),0.30)]";
+  "linen text-[var(--ink)] placeholder:text-fg-placeholder focus-visible:ring-[rgba(var(--accent-rgb),0.30)]";
 
 export default function UploadModal({
   onClose,
@@ -106,7 +106,7 @@ export default function UploadModal({
               </SelectContent>
             </Select>
             {topics.length === 0 && (
-              <p className="text-xs text-stone-500 dark:text-stone-400">
+              <p className="text-xs text-fg-tertiary">
                 Add a module and a topic inside a course first, then attach sources to it.
               </p>
             )}
@@ -158,7 +158,7 @@ export default function UploadModal({
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               className="text-sm text-stone-600 dark:text-stone-300 file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--accent)] file:text-[var(--accent-ink)] file:px-3 file:py-1.5 file:text-xs hover:file:bg-[var(--accent-hover)] h-auto py-1.5"
             />
-            <p id="upload-file-hint" className="text-[11px] text-stone-500 dark:text-stone-400">
+            <p id="upload-file-hint" className="text-[11px] text-fg-tertiary">
               PDF, Word (.docx), PowerPoint (.pptx), .txt or .md files. Scanned PDFs are read with OCR when it is installed.
             </p>
           </div>

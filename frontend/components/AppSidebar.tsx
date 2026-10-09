@@ -73,12 +73,12 @@ export default function AppSidebar({
         </span>
         <div className="flex items-center gap-1 group-data-[collapsible=icon]:hidden">
           <ThemeToggle />
-          <SidebarTrigger className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent" />
+          <SidebarTrigger className="text-sidebar-fg-secondary hover:text-sidebar-foreground hover:bg-sidebar-accent" />
         </div>
         {/* Icon rail is too narrow (3rem) for the logo mark and toggle
             side by side, so collapsed mode stacks the trigger below the
             mark instead (the row above becomes a column via flex-col). */}
-        <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent" />
+        <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex text-sidebar-fg-secondary hover:text-sidebar-foreground hover:bg-sidebar-accent" />
       </SidebarHeader>
 
       <SidebarContent>
@@ -86,14 +86,14 @@ export default function AppSidebar({
           <SidebarGroupLabel>Library</SidebarGroupLabel>
           <SidebarGroupContent>
             <div className="relative mb-1 group-data-[collapsible=icon]:hidden">
-              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sidebar-foreground/50">
+              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sidebar-fg-tertiary">
                 <SearchIcon />
               </span>
               <Input
                 value={query}
                 onChange={(e) => onQueryChange(e.target.value)}
                 placeholder="Search courses..."
-                className="h-8 pl-8 bg-transparent border-sidebar-border text-sidebar-foreground placeholder:text-sidebar-foreground/50 focus-visible:ring-sidebar-ring"
+                className="h-8 pl-8 bg-transparent border-sidebar-border text-sidebar-foreground placeholder:text-sidebar-fg-tertiary focus-visible:ring-sidebar-ring"
               />
             </div>
 
@@ -106,7 +106,7 @@ export default function AppSidebar({
               </SidebarMenuItem>
 
               {loading && (
-                <p className="px-3 py-2 text-xs text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">
+                <p className="px-3 py-2 text-xs text-sidebar-fg-secondary group-data-[collapsible=icon]:hidden">
                   Loading...
                 </p>
               )}
@@ -128,7 +128,7 @@ export default function AppSidebar({
                 </div>
               )}
               {!loading && !loadError && courses.length === 0 && (
-                <p className="px-3 py-2 text-xs text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">
+                <p className="px-3 py-2 text-xs text-sidebar-fg-secondary group-data-[collapsible=icon]:hidden">
                   {query ? "No courses match your search." : "No courses yet."}
                 </p>
               )}

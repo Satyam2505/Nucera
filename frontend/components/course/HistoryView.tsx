@@ -107,7 +107,7 @@ export default function HistoryView({ tree }: { tree: CourseTree }) {
       )}
 
       {loading && !error && (
-        <p role="status" className="text-sm text-stone-500 dark:text-stone-400">
+        <p role="status" className="text-sm text-fg-secondary">
           Loading history...
         </p>
       )}
@@ -121,7 +121,7 @@ export default function HistoryView({ tree }: { tree: CourseTree }) {
       {!error &&
         groups.map((group) => (
           <section key={group.label} aria-label={group.label} className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-tertiary">
               {group.label}
             </h3>
             <ul className="divide-y divide-[rgba(var(--ink-rgb),0.08)] rounded-xl border border-[rgba(var(--ink-rgb),0.10)] surface">
@@ -143,7 +143,7 @@ export default function HistoryView({ tree }: { tree: CourseTree }) {
                           {change}
                         </p>
                       )}
-                      <p className="text-xs text-stone-500 dark:text-stone-400">{timeLabel(s)}</p>
+                      <p className="text-xs text-fg-tertiary">{timeLabel(s)}</p>
                     </div>
                   </li>
                 );

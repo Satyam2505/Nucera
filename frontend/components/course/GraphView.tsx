@@ -104,9 +104,9 @@ export default function GraphView({ courseId, onOpenTopic }: Props) {
     return { nodes, edges };
   }, [graph, courseId]);
 
-  if (!data) return <p className="p-6 text-sm text-stone-500 dark:text-stone-400">Loading graph...</p>;
+  if (!data) return <p className="p-6 text-sm text-fg-secondary">Loading graph...</p>;
   if (data.nodes.length === 0) {
-    return <p className="p-6 text-sm text-stone-500 dark:text-stone-400">No topics in this course yet.</p>;
+    return <p className="p-6 text-sm text-fg-secondary">No topics in this course yet.</p>;
   }
 
   // Keyed by course so each course gets its own canvas state and layout.

@@ -88,7 +88,7 @@ export default function SourcesView({
   }
 
   if (!topicId) {
-    return <div className="p-8 text-sm text-stone-500 dark:text-stone-400">Select a topic to manage its sources.</div>;
+    return <div className="p-8 text-sm text-fg-secondary">Select a topic to manage its sources.</div>;
   }
 
   return (
@@ -110,10 +110,10 @@ export default function SourcesView({
         </p>
       )}
 
-      {loading && <p className="text-sm text-stone-500 dark:text-stone-400">Loading sources...</p>}
+      {loading && <p className="text-sm text-fg-secondary">Loading sources...</p>}
 
       {!loading && sources.length === 0 && (
-        <p className="text-sm text-stone-500 dark:text-stone-400">
+        <p className="text-sm text-fg-secondary">
           No sources yet — add one to start building this topic&apos;s material.
         </p>
       )}
@@ -127,7 +127,7 @@ export default function SourcesView({
                 <Badge variant="secondary" className="text-[10px]">
                   {SOURCE_TYPE_LABEL[source.source_type] ?? source.source_type}
                 </Badge>
-                <span className="text-xs text-stone-500 dark:text-stone-400">
+                <span className="text-xs text-fg-tertiary">
                   {source.chunk_count} {source.chunk_count === 1 ? "chunk" : "chunks"} · added{" "}
                   {formatDate(source.created_at)}
                 </span>

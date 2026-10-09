@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { api, type CourseTree, type NextStep } from "@/lib/api";
 import { useAppState } from "@/lib/AppStateContext";
 import { fadingNote, stepAction, stepBadge } from "@/lib/next-steps";
-import { STATUS_COLOR, STATUS_LABEL, type MasteryStatusKey } from "@/lib/status-colors";
+import { STATUS_COLOR, STATUS_TEXT_COLOR, STATUS_LABEL, type MasteryStatusKey } from "@/lib/status-colors";
 
 const ORDER: MasteryStatusKey[] = ["mastered", "in_progress", "unmastered", "missed"];
 const RADIUS = 80;
@@ -81,7 +81,7 @@ export default function MasteryView({
   const lagging = [...entries].filter((e) => e.score < 40).sort((a, b) => a.score - b.score);
 
   if (entries.length === 0) {
-    return <div className="p-8 text-sm text-stone-500 dark:text-stone-400">No topics in this course yet.</div>;
+    return <div className="p-8 text-sm text-fg-secondary">No topics in this course yet.</div>;
   }
 
   let cumulative = 0;
@@ -128,7 +128,7 @@ export default function MasteryView({
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-3xl font-semibold text-[var(--ink)]">{avgScore}</span>
-          <span className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">course mastery</span>
+          <span className="text-[11px] text-fg-tertiary mt-0.5">course mastery</span>
           <span className="text-[10px] text-[var(--accent-hover)] mt-2 group-hover:underline">
             {expanded ? "Hide breakdown" : "Click for breakdown"}
           </span>
@@ -174,7 +174,7 @@ function ModuleCard({ index, module }: { index: number; module: ModuleEntries })
         <p className="text-sm font-medium text-[var(--ink)] truncate">
           {index + 1}. {module.name}
         </p>
-        <span className="text-xs text-stone-500 dark:text-stone-400 shrink-0">
+        <span className="text-xs text-fg-tertiary shrink-0">
           {module.entries.length === 0 ? "No topics" : `${module.avgScore}% average`}
         </span>
       </div>
@@ -201,7 +201,7 @@ function ModuleCard({ index, module }: { index: number; module: ModuleEntries })
                   />
                   <span className="truncate">{topic.name}</span>
                 </span>
-                <span className="text-xs text-stone-500 dark:text-stone-400 shrink-0">
+                <span className="text-xs text-fg-tertiary shrink-0">
                   {note && <span className="mr-2 text-[var(--warn-text)]">{note}</span>}
                   {STATUS_LABEL[status]} · {score}
                 </span>
@@ -227,15 +227,15 @@ function BreakdownList({
 }) {
   return (
     <Card className="surface rounded-2xl p-4 border-[rgba(var(--ink-rgb),0.09)]">
-      <p className="text-xs font-medium mb-3" style={{ color: STATUS_COLOR[tone] }}>
+      <p className="text-xs font-medium mb-3" style={{ color: STATUS_TEXT_COLOR[tone] }}>
         {title}
       </p>
-      {items.length === 0 && <p className="text-xs text-stone-500 dark:text-stone-400">{empty}</p>}
+      {items.length === 0 && <p className="text-xs text-fg-secondary">{empty}</p>}
       <ul className="space-y-2">
         {items.map(({ topic, score }) => (
           <li key={topic.id} className="flex items-center justify-between text-sm text-[var(--ink)]">
             <span className="truncate pr-2">{topic.name}</span>
-            <span className="text-xs text-stone-500 dark:text-stone-400 shrink-0">{score}</span>
+            <span className="text-xs text-fg-tertiary shrink-0">{score}</span>
           </li>
         ))}
       </ul>

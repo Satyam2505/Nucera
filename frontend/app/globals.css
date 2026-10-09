@@ -67,7 +67,7 @@
      property of the token. Each clears 4.5:1 on every surface it sits on
      (page, cards, inputs, muted fills, hover tints); lib/theme-contrast.test.ts
      checks that for both themes and for the OS-dark fallback below. */
-  --text-secondary: #4b5266;
+  --text-secondary: #3c4356;
   --text-tertiary: #586075;
   --text-placeholder: #667085;
 
@@ -127,6 +127,8 @@
   /* Quieter text on the rail (replaces text-sidebar-foreground/70 and the like). */
   --sidebar-text-secondary: #c9cde0;
   --sidebar-text-tertiary: #a9b0c6;
+  /* Error text on the navy rail; --error-text is dark red and fails there in the light theme. */
+  --sidebar-error-text: #fca5a5;
 }
 
 :root[data-theme="dark"] {
@@ -311,6 +313,7 @@
   --color-fg-placeholder: var(--text-placeholder);
   --color-sidebar-fg-secondary: var(--sidebar-text-secondary);
   --color-sidebar-fg-tertiary: var(--sidebar-text-tertiary);
+  --color-sidebar-error: var(--sidebar-error-text);
 }
 
 @layer base {

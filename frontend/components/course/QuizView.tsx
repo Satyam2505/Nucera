@@ -217,7 +217,7 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
   }
 
   if (topicId === null) {
-    return <div className="p-8 text-sm text-stone-500 dark:text-stone-400">Select a topic to take its quiz.</div>;
+    return <div className="p-8 text-sm text-fg-secondary">Select a topic to take its quiz.</div>;
   }
 
   return (
@@ -240,7 +240,7 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
       )}
 
       {phase.kind === "loading" && (
-        <p role="status" className="text-sm text-stone-500 dark:text-stone-400">
+        <p role="status" className="text-sm text-fg-secondary">
           Loading quiz...
         </p>
       )}
@@ -412,7 +412,7 @@ function QuizForm({ set, answers, onAnswer, submitting, error, onSubmit }: FormP
         {submitting ? "Submitting..." : "Submit answers"}
       </Button>
       {!complete && (
-        <p className="text-xs text-center text-stone-500 dark:text-stone-400">
+        <p className="text-xs text-center text-fg-tertiary">
           Answer every question to submit.
         </p>
       )}

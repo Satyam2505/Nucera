@@ -157,7 +157,7 @@ export default function ModuleRail({
         <p className="text-[11px] font-semibold uppercase tracking-wide text-sidebar-foreground/60">Modules</p>
         <button
           onClick={() => setDialog({ kind: "addModule" })}
-          className="p-1.5 rounded-lg text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          className="p-1.5 rounded-lg text-sidebar-fg-secondary hover:text-sidebar-foreground hover:bg-sidebar-accent transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
           aria-label="Add module"
           title="Add module"
         >
@@ -166,14 +166,14 @@ export default function ModuleRail({
       </div>
 
       {actionError && (
-        <p role="alert" className="px-2 py-1 text-xs text-[var(--error-text)]">
+        <p role="alert" className="px-2 py-1 text-xs text-sidebar-error">
           {actionError}
         </p>
       )}
 
       {tree.modules.length === 0 && (
         <div className="px-2 py-3 space-y-2">
-          <p className="text-xs text-sidebar-foreground/70">This course has no modules yet.</p>
+          <p className="text-xs text-sidebar-fg-secondary">This course has no modules yet.</p>
           <button
             onClick={() => setDialog({ kind: "addModule" })}
             className="text-xs font-medium text-[var(--accent)] hover:underline"
@@ -251,7 +251,7 @@ export default function ModuleRail({
                         className={`flex-1 min-w-0 flex items-center gap-2.5 rounded-lg pl-7 pr-3 py-2 text-left text-sm transition border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring ${
                           active
                             ? "bg-[rgba(var(--accent-rgb),0.18)] text-white border-[rgba(var(--accent-rgb),0.4)]"
-                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border-transparent"
+                            : "text-sidebar-fg-secondary hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border-transparent"
                         }`}
                       >
                         <span

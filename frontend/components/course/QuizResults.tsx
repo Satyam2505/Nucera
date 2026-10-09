@@ -113,7 +113,7 @@ function ResultCard({ index, result }: { index: number; result: QuizResultItem }
         </p>
       )}
       {result.sources.length > 0 && (
-        <p className="mt-1.5 text-xs text-stone-500 dark:text-stone-400">
+        <p className="mt-1.5 text-xs text-fg-tertiary">
           Source: {result.sources.map(citationLabel).join("; ")}
         </p>
       )}

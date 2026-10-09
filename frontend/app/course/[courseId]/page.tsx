@@ -51,7 +51,7 @@ function HomeLink() {
       variant="ghost"
       size="icon"
       asChild
-      className="shrink-0 text-stone-500 dark:text-stone-400 hover:text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.08)]"
+      className="shrink-0 text-fg-secondary hover:text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.08)]"
     >
       <Link href="/" aria-label="Home" title="Home">
         <HomeIcon />
@@ -143,7 +143,7 @@ export default function CourseWorkspace() {
   if (state.status === "notfound") {
     return (
       <PageMessage title="Course not found">
-        <p className="text-sm text-stone-500 dark:text-stone-400">It may have been deleted, or the link is wrong.</p>
+        <p className="text-sm text-fg-secondary">It may have been deleted, or the link is wrong.</p>
         <Button asChild variant="outline">
           <Link href="/">Back to your courses</Link>
         </Button>
@@ -178,7 +178,7 @@ export default function CourseWorkspace() {
         <div className="flex items-center gap-4 min-w-0">
           <button
             onClick={() => setTopicsOpen((v) => !v)}
-            className="md:hidden p-1.5 -ml-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.08)] transition shrink-0"
+            className="md:hidden p-1.5 -ml-1.5 rounded-lg text-fg-secondary hover:text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.08)] transition shrink-0"
             aria-label={topicsOpen ? "Hide modules" : "Show modules"}
           >
             <ListIcon />
@@ -187,7 +187,7 @@ export default function CourseWorkspace() {
           <div className="min-w-0">
             <h1 className="text-base font-semibold text-[var(--ink)] truncate">{tree.name}</h1>
             {tree.description && (
-              <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{tree.description}</p>
+              <p className="text-xs text-fg-tertiary truncate">{tree.description}</p>
             )}
           </div>
         </div>
@@ -252,7 +252,7 @@ export default function CourseWorkspace() {
               <h2 className="text-base font-semibold text-[var(--ink)]">
                 {tree.modules.length === 0 ? "Add your first module" : "Add your first topic"}
               </h2>
-              <p className="text-sm text-stone-500 dark:text-stone-400 max-w-sm">
+              <p className="text-sm text-fg-secondary max-w-sm">
                 {tree.modules.length === 0
                   ? "Modules are the chapters of this course. Add one, then fill it with topics."
                   : "Topics are the sections inside a module. Add one to start learning."}

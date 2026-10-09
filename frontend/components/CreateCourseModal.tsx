@@ -14,7 +14,7 @@ import { useAppState } from "@/lib/AppStateContext";
 import { courseHref } from "@/lib/courses";
 
 const inputClass =
-  "linen text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus-visible:ring-[rgba(var(--accent-rgb),0.30)]";
+  "linen text-[var(--ink)] placeholder:text-fg-placeholder focus-visible:ring-[rgba(var(--accent-rgb),0.30)]";
 
 export default function CreateCourseModal({ onClose }: { onClose: () => void }) {
   const { refresh } = useAppState();
@@ -88,7 +88,7 @@ export default function CreateCourseModal({ onClose }: { onClose: () => void }) 
               <AlertDescription className="text-[var(--error-text)] text-center w-full">{error}</AlertDescription>
             </Alert>
           )}
-          <p className="text-[11px] text-stone-500 dark:text-stone-400 text-center">
+          <p className="text-[11px] text-fg-tertiary text-center">
             You&apos;ll add modules and topics from inside the course.
           </p>
         </form>

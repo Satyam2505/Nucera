@@ -130,7 +130,7 @@ export default function LandingPage() {
           {/* Until the library has loaded there is nothing true to show: a greeting
               and zero counts here would read as an empty library. */}
           {view === "loading" && (
-            <p role="status" className="pt-8 text-sm text-stone-500 dark:text-stone-400">
+            <p role="status" className="pt-8 text-sm text-fg-secondary">
               Loading your courses...
             </p>
           )}
@@ -145,7 +145,7 @@ export default function LandingPage() {
                 </h1>
                 <p
                   key={welcome.message}
-                  className="animate-in fade-in-0 duration-200 text-base text-stone-500 dark:text-stone-400 max-w-md"
+                  className="animate-in fade-in-0 duration-200 text-base text-fg-secondary max-w-md"
                 >
                   {welcome.message}
                 </p>
@@ -155,7 +155,7 @@ export default function LandingPage() {
                   </Button>
                 )}
                 {welcome.contextLine && (
-                  <p className="text-xs text-stone-400 dark:text-stone-500">{welcome.contextLine}</p>
+                  <p className="text-xs text-fg-tertiary">{welcome.contextLine}</p>
                 )}
               </div>
 
@@ -171,7 +171,7 @@ export default function LandingPage() {
                     <CardDescription>Topics mastered</CardDescription>
                     <CardTitle className="text-3xl text-[var(--ink)]">
                       {masteredCount}
-                      <span className="text-base font-normal text-stone-500 dark:text-stone-400">
+                      <span className="text-base font-normal text-fg-secondary">
                         {" "}
                         / {topics.length}
                       </span>
@@ -205,7 +205,7 @@ export default function LandingPage() {
                       >
                         <Link href={courseHref(topic.course_id)} className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-[var(--ink)] truncate">{topic.name}</p>
-                          <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{topicLocation(topic)}</p>
+                          <p className="text-xs text-fg-tertiary truncate">{topicLocation(topic)}</p>
                         </Link>
                         <button
                           onClick={() => toggleRevision(topic.id)}
@@ -238,7 +238,7 @@ export default function LandingPage() {
                         >
                           <div className="min-w-0">
                             <p className="text-sm font-medium text-[var(--ink)] truncate">{topic.name}</p>
-                            <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{topicLocation(topic)}</p>
+                            <p className="text-xs text-fg-tertiary truncate">{topicLocation(topic)}</p>
                           </div>
                           <Badge variant="outline" className="shrink-0 ml-3">
                             {mastery?.score ?? 0}%
