@@ -579,3 +579,23 @@ body {
 :root[data-theme="dark"] .markdown .hljs-class .hljs-title {
   color: #5fd0d9;
 }
+
+/* Reduced motion. Animations and transitions are shortened to an instant, not removed
+   (animation: none would stop the animationend / transitionend events that Radix
+   dialogs, menus, sheets and tooltips wait for before they unmount), and smooth
+   scrolling is turned off. Normal motion is unchanged. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}

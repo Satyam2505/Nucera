@@ -70,8 +70,10 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
   useEffect(() => () => abortRef.current?.abort(), []);
 
   useEffect(() => {
-    // "auto" while words are arriving: a smooth scroll can't keep up with them.
-    bottomRef.current?.scrollIntoView({ behavior: streaming === null ? "smooth" : "auto" });
+    // "auto" while words are arriving: a smooth scroll can't keep up with them, and
+    // when the user prefers reduced motion.
+    const smooth = streaming === null && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    bottomRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
   }, [messages, streaming]);
 
   async function handleAsk(e: FormEvent) {
