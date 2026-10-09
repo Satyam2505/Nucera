@@ -137,7 +137,7 @@ export default function SourcesView({
               variant="outline"
               onClick={() => setPendingDelete(source)}
               disabled={deletingId === source.id}
-              className="shrink-0 gap-1.5 text-xs font-medium rounded-lg border-[rgba(var(--ink-rgb),0.15)] text-stone-600 dark:text-stone-400 hover:border-[var(--error-border)] hover:text-[var(--error-text)] hover:bg-[var(--error-bg)] h-auto py-1.5 px-3"
+              className="shrink-0 gap-1.5 text-xs font-medium rounded-lg border-[rgba(var(--ink-rgb),0.15)] text-fg-tertiary hover:border-[var(--error-border)] hover:text-[var(--error-text)] hover:bg-[var(--error-bg)] h-auto py-1.5 px-3"
             >
               <TrashIcon />
               {deletingId === source.id ? "Deleting..." : "Delete"}

@@ -52,7 +52,7 @@ export default function CreateCourseModal({ onClose }: { onClose: () => void }) 
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="course-name" className="text-xs font-medium text-stone-600 dark:text-stone-300">
+            <Label htmlFor="course-name" className="text-xs font-medium text-fg-secondary">
               Course name
             </Label>
             <Input
@@ -66,7 +66,7 @@ export default function CreateCourseModal({ onClose }: { onClose: () => void }) 
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="course-description" className="text-xs font-medium text-stone-600 dark:text-stone-300">
+            <Label htmlFor="course-description" className="text-xs font-medium text-fg-secondary">
               Description (optional)
             </Label>
             <Textarea

@@ -151,8 +151,8 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
         )}
         {messages.length === 0 && !asking && !loadingHistory && (
           <div className="h-full flex flex-col items-center justify-center text-center gap-1.5">
-            <p className="text-sm text-stone-600 dark:text-stone-400">Ask anything about {topic?.name ?? "this topic"}.</p>
-            <p className="text-xs text-fg-secondary">Answers are grounded in the material you&apos;ve uploaded.</p>
+            <p className="text-sm text-fg-secondary">Ask anything about {topic?.name ?? "this topic"}.</p>
+            <p className="text-xs text-fg-tertiary">Answers are grounded in the material you&apos;ve uploaded.</p>
           </div>
         )}
         {loadingHistory && (
@@ -193,7 +193,7 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
                       <Badge
                         key={si}
                         variant="secondary"
-                        className="text-[11px] font-normal text-stone-600 dark:text-stone-400"
+                        className="text-[11px] font-normal text-fg-tertiary"
                       >
                         {s.source}
                         {s.page != null ? `, p. ${s.page}` : ""}

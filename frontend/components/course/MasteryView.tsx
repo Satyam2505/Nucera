@@ -137,7 +137,7 @@ export default function MasteryView({
 
       <div className="flex items-center gap-4 flex-wrap justify-center">
         {ORDER.map((status) => (
-          <div key={status} className="flex items-center gap-1.5 text-xs text-stone-600 dark:text-stone-400">
+          <div key={status} className="flex items-center gap-1.5 text-xs text-fg-tertiary">
             <span className="h-2 w-2 rounded-full" style={{ background: STATUS_COLOR[status] }} />
             {STATUS_LABEL[status]} ({counts[status]})
           </div>
@@ -280,7 +280,7 @@ function UpNext({
     <section aria-label="What to study next" className="w-full max-w-3xl space-y-2">
       <h2 className="text-sm font-semibold text-[var(--ink)]">What to study next</h2>
       {steps.length === 0 ? (
-        <p className="text-sm text-stone-600 dark:text-stone-300">
+        <p className="text-sm text-fg-secondary">
           Everything here is mastered and up to date. Nothing needs review right now.
         </p>
       ) : (
@@ -303,7 +303,7 @@ function UpNext({
                       </span>
                       {step.topic_name}
                     </p>
-                    <p className="text-xs text-stone-600 dark:text-stone-300">
+                    <p className="text-xs text-fg-secondary">
                       {step.reason} · {step.module_name}
                     </p>
                   </div>

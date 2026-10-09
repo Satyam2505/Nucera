@@ -28,7 +28,7 @@ export default function QuizResults({ attempt, onNewQuiz }: Props) {
         <p className="font-medium">
           You got {attempt.correct} of {attempt.total} right ({Math.round(attempt.score_percent)}%).
         </p>
-        <p className="text-stone-600 dark:text-stone-300">
+        <p className="text-fg-secondary">
           Mastery {formatDelta(attempt.score_delta)}
           {mastery && (
             <>
@@ -98,7 +98,7 @@ function ResultCard({ index, result }: { index: number; result: QuizResultItem }
               <span>
                 {key}. {label}
               </span>
-              <span className="shrink-0 text-[11px] font-medium text-stone-600 dark:text-stone-300">
+              <span className="shrink-0 text-[11px] font-medium text-fg-secondary">
                 {[isChosen && "Your answer", isCorrect && "Correct answer"].filter(Boolean).join(" · ")}
               </span>
             </li>
@@ -107,7 +107,7 @@ function ResultCard({ index, result }: { index: number; result: QuizResultItem }
       </ul>
 
       {result.explanation && (
-        <p className="mt-3 text-sm text-stone-700 dark:text-stone-300">
+        <p className="mt-3 text-sm text-fg-secondary">
           <span className="font-medium text-[var(--ink)]">Why: </span>
           {result.explanation}
         </p>

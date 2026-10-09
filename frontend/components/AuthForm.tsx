@@ -50,7 +50,7 @@ export default function AuthForm() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-xs font-medium text-stone-600 dark:text-stone-300">
+              <Label htmlFor="email" className="text-xs font-medium text-fg-secondary">
                 Email
               </Label>
               <Input
@@ -65,7 +65,7 @@ export default function AuthForm() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password" className="text-xs font-medium text-stone-600 dark:text-stone-300">
+              <Label htmlFor="password" className="text-xs font-medium text-fg-secondary">
                 Password
               </Label>
               <Input
@@ -82,7 +82,7 @@ export default function AuthForm() {
             </div>
 
             {sessionExpired && !error && (
-              <p role="status" className="text-xs text-stone-600 dark:text-stone-300">
+              <p role="status" className="text-xs text-fg-secondary">
                 Your session has expired. Please log in again.
               </p>
             )}
