@@ -14,9 +14,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { nodeOpacity, type NodeRole, type PathState } from "./graph-model";
 import { STATUS_COLOR, STATUS_FILL, STATUS_TEXT_COLOR } from "./status-colors";
 import {
   AA_NORMAL_TEXT,
+  colorOf,
   composite,
   contrastRatio,
   describeFailures,
@@ -350,6 +352,55 @@ test("the existing status colours and fills are unchanged (dots, borders and gra
   const light = themeVariables(parseThemeCss(CSS), "light");
   assert.equal(light.get("--status-in-progress"), "#c9860f");
   assert.equal(light.get("--status-unmastered"), "#857f6b");
+});
+
+// --- knowledge graph cards (dimmed by highlight role or learning-path state) ---------------------
+// Every role and path state, as exhaustive records: adding a new one is a type error here until
+// it is covered, so a state cannot silently skip the contrast check.
+const CARD_ROLES: Record<NodeRole, true> = { focus: true, prereq: true, dependent: true, none: true, dim: true, muted: true, faded: true };
+const CARD_PATHS: Record<PathState | "off", true> = { covered: true, attention: true, next: true, later: true, off: true };
+
+for (const theme of THEMES) {
+  test(`graph cards stay readable when dimmed, except the intentionally faded state (${theme})`, () => {
+    const vars = themeVariables(parseThemeCss(CSS), theme);
+    const page = colorOf(vars, "--bg-page");
+    const surface = colorOf(vars, "--bg-surface");
+    // The whole card is drawn at its opacity over the canvas, so the text and the card face it
+    // sits on are both blended with the page behind it.
+    const blended = (c: typeof page, opacity: number) => composite({ ...c, a: opacity }, page);
+    let checked = 0;
+    let faded = 0;
+    for (const role of Object.keys(CARD_ROLES) as NodeRole[]) {
+      for (const pathKey of Object.keys(CARD_PATHS) as (PathState | "off")[]) {
+        const opacity = nodeOpacity(role, pathKey === "off" ? null : pathKey);
+        if (role === "faded") {
+          assert.ok(opacity < 0.5, `faded must stay clearly faded (${pathKey}): ${opacity}`);
+          faded++;
+          continue;
+        }
+        assert.ok(opacity >= 0.5, `${role}/${pathKey} is dimmed to ${opacity} but is not the faded state`);
+        const face = blended(surface, opacity);
+        for (const token of ["--ink", "--text-secondary"]) {
+          const ratio = contrastRatio(blended(colorOf(vars, token), opacity), face);
+          assert.ok(ratio >= AA_NORMAL_TEXT, `${token} on a ${role}/${pathKey} card (opacity ${opacity}) is ${ratio.toFixed(2)}:1`);
+        }
+        checked++;
+      }
+    }
+    const roles = Object.keys(CARD_ROLES).length;
+    const paths = Object.keys(CARD_PATHS).length;
+    assert.equal(faded, paths, "every path state is checked for the faded role");
+    assert.equal(checked, (roles - 1) * paths, "no non-faded role/path combination is skipped");
+  });
+}
+
+test("graph card opacity keeps the existing role and path precedence", () => {
+  assert.equal(nodeOpacity("none", null), 1);
+  assert.equal(nodeOpacity("focus", "later"), 1); // a highlight role beats the path lens
+  assert.equal(nodeOpacity("prereq", "later"), 1);
+  assert.ok(nodeOpacity("none", "later") < 1); // later-on-path is softly dimmed
+  assert.equal(nodeOpacity("faded", "later"), nodeOpacity("faded", null)); // role wins over path
+  assert.equal(nodeOpacity("none", "attention"), 1);
 });
 
 console.log(`\n${passed} passed`);

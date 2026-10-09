@@ -113,6 +113,19 @@ export function computePathStates(model: GraphModel): Map<number, PathState> {
  * faded:     outside the neighborhood in focus mode
  */
 export type NodeRole = "focus" | "prereq" | "dependent" | "none" | "dim" | "muted" | "faded";
+
+// Card opacity per role. De-emphasised cards must keep their title and status line
+// readable (4.5:1, checked in theme-contrast.test.ts); only "faded" (outside the
+// neighbourhood in focus mode) is meant to be nearly invisible.
+export const NODE_OPACITY: Partial<Record<NodeRole, number>> = { dim: 0.75, muted: 0.75, faded: 0.14 };
+const LATER_PATH_OPACITY = 0.75;
+
+/** A topic card's opacity from its highlight role and learning-path state. */
+export function nodeOpacity(role: NodeRole, path: PathState | null): number {
+  if (path === "later" && role === "none") return LATER_PATH_OPACITY;
+  return NODE_OPACITY[role] ?? 1;
+}
+
 export type EdgeRole = "prereq" | "dependent" | "hover" | "none" | "dim" | "muted" | "faded";
 
 export interface Highlight {
