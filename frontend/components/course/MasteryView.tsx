@@ -127,7 +127,7 @@ export default function MasteryView({
           })}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-3xl font-semibold text-[var(--ink)]">{avgScore}</span>
+          <span className="text-3xl font-semibold text-[var(--ink)]">{avgScore}%</span>
           <span className="text-[11px] text-fg-tertiary mt-0.5">course mastery</span>
           <span className="text-[10px] text-[var(--accent-hover)] mt-2 group-hover:underline">
             {expanded ? "Hide breakdown" : "Click for breakdown"}
@@ -145,7 +145,7 @@ export default function MasteryView({
       </div>
 
       {expanded && (
-        <div className="w-full max-w-3xl grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="w-full max-w-3xl grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] items-start gap-4">
           <BreakdownList title="Excelling" tone="mastered" items={excelling} empty="No standout topics yet." />
           <BreakdownList
             title="Steady progress"
@@ -289,9 +289,9 @@ function UpNext({
             const action = stepAction(step);
             return (
               <li key={step.topic_id}>
-                <Card className="surface rounded-2xl p-4 border-[rgba(var(--ink-rgb),0.09)] flex-row items-center justify-between gap-3">
+                <Card className="surface rounded-2xl p-4 border-[rgba(var(--ink-rgb),0.09)] flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-[var(--ink)] truncate">
+                    <p className="text-sm font-medium text-[var(--ink)] sm:truncate">
                       <span
                         className={`mr-2 rounded px-1.5 py-0.5 text-[10px] font-medium ${
                           step.kind === "review"

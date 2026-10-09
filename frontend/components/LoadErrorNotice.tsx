@@ -26,14 +26,14 @@ export default function LoadErrorNotice({ variant, reason, onRetry, retrying = f
     >
       <AlertTitle className="text-[var(--error-text)]">{title}</AlertTitle>
       <AlertDescription className="text-[var(--error-text)]">
-        <span>{detail}</span>
+        <span className="block">{detail}</span>
         <Button
           type="button"
           size="sm"
           variant="outline"
           onClick={onRetry}
           disabled={retrying}
-          className="mt-2 w-fit"
+          className="mt-3 w-fit"
         >
           {retrying ? "Trying again..." : "Try again"}
         </Button>

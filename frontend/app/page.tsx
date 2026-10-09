@@ -159,14 +159,14 @@ export default function LandingPage() {
                 )}
               </div>
 
-              <div className="w-full max-w-3xl grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Card className="bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">
+              <div className="w-full max-w-3xl grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+                <Card className="bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)] [--card-spacing:--spacing(3)] sm:[--card-spacing:--spacing(4)]">
                   <CardHeader className="pb-2">
                     <CardDescription>Courses</CardDescription>
                     <CardTitle className="text-3xl text-[var(--ink)]">{courses.length}</CardTitle>
                   </CardHeader>
                 </Card>
-                <Card className="bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">
+                <Card className="bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)] [--card-spacing:--spacing(3)] sm:[--card-spacing:--spacing(4)]">
                   <CardHeader className="pb-2">
                     <CardDescription>Topics mastered</CardDescription>
                     <CardTitle className="text-3xl text-[var(--ink)]">
@@ -178,7 +178,7 @@ export default function LandingPage() {
                     </CardTitle>
                   </CardHeader>
                 </Card>
-                <Card className="bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">
+                <Card className="bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)] [--card-spacing:--spacing(3)] sm:[--card-spacing:--spacing(4)] col-span-2 sm:col-span-1">
                   <CardHeader className="pb-2">
                     <CardDescription>Revision list</CardDescription>
                     <CardTitle className="text-3xl text-[var(--ink)]">{revisionList.length}</CardTitle>
