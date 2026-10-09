@@ -45,3 +45,31 @@ export function errorDetail(status: number, body: string): string {
 export function isSessionExpiry(status: number, sentToken: boolean): boolean {
   return status === 401 && sentToken;
 }
+
+const UNREACHABLE = "Can't reach the server. Check that the backend is running, then try again.";
+// What fetch() throws when nothing answered at all, by browser.
+const NETWORK_FAILURE = /failed to fetch|networkerror|load failed|network request failed/i;
+
+function endSentence(text: string): string {
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+/**
+ * One readable sentence for why a request failed, for banners and notices:
+ * - an error that carries an HTTP status (the app's ApiError) gives the server's
+ *   own readable detail;
+ * - fetch() rejecting (a TypeError such as "Failed to fetch") means nothing
+ *   answered, so the server is unreachable;
+ * - anything else is not something a reader can act on, so it says so plainly
+ *   rather than showing a raw exception message.
+ * Duck-typed on `status` so this file stays import-free.
+ */
+export function failureReason(err: unknown): string {
+  if (err instanceof Error) {
+    if (typeof (err as { status?: unknown }).status === "number" && err.message.trim()) {
+      return endSentence(err.message.trim());
+    }
+    if (err instanceof TypeError && NETWORK_FAILURE.test(err.message)) return UNREACHABLE;
+  }
+  return "Something went wrong.";
+}

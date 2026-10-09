@@ -78,7 +78,7 @@ export default function HistoryView({ tree }: { tree: CourseTree }) {
     <div className="p-8 max-w-2xl mx-auto space-y-5">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-[var(--ink)]">Study history</h2>
-        <label className="flex items-center gap-2 text-xs text-stone-600 dark:text-stone-300">
+        <label className="flex items-center gap-2 text-xs text-fg-secondary">
           Topic
           <select
             value={topicFilter}
@@ -107,13 +107,13 @@ export default function HistoryView({ tree }: { tree: CourseTree }) {
       )}
 
       {loading && !error && (
-        <p role="status" className="text-sm text-stone-500 dark:text-stone-400">
+        <p role="status" className="text-sm text-fg-secondary">
           Loading history...
         </p>
       )}
 
       {!loading && !error && items.length === 0 && (
-        <p className="text-sm text-stone-600 dark:text-stone-300">
+        <p className="text-sm text-fg-secondary">
           Nothing here yet. Ask the tutor a question or take a quiz and it will show up.
         </p>
       )}
@@ -121,7 +121,7 @@ export default function HistoryView({ tree }: { tree: CourseTree }) {
       {!error &&
         groups.map((group) => (
           <section key={group.label} aria-label={group.label} className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-tertiary">
               {group.label}
             </h3>
             <ul className="divide-y divide-[rgba(var(--ink-rgb),0.08)] rounded-xl border border-[rgba(var(--ink-rgb),0.10)] surface">
@@ -131,7 +131,7 @@ export default function HistoryView({ tree }: { tree: CourseTree }) {
                   <li key={s.id} className="flex items-center justify-between gap-3 px-4 py-3">
                     <div className="min-w-0">
                       <p className="text-sm text-[var(--ink)]">{SESSION_LABEL[s.type]}</p>
-                      <p className="text-xs text-stone-600 dark:text-stone-300 truncate">{s.topic_name}</p>
+                      <p className="text-xs text-fg-secondary truncate">{s.topic_name}</p>
                     </div>
                     <div className="text-right shrink-0">
                       {change && (
@@ -143,7 +143,7 @@ export default function HistoryView({ tree }: { tree: CourseTree }) {
                           {change}
                         </p>
                       )}
-                      <p className="text-xs text-stone-500 dark:text-stone-400">{timeLabel(s)}</p>
+                      <p className="text-xs text-fg-tertiary">{timeLabel(s)}</p>
                     </div>
                   </li>
                 );

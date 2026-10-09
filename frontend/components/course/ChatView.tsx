@@ -70,8 +70,10 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
   useEffect(() => () => abortRef.current?.abort(), []);
 
   useEffect(() => {
-    // "auto" while words are arriving: a smooth scroll can't keep up with them.
-    bottomRef.current?.scrollIntoView({ behavior: streaming === null ? "smooth" : "auto" });
+    // "auto" while words are arriving: a smooth scroll can't keep up with them, and
+    // when the user prefers reduced motion.
+    const smooth = streaming === null && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    bottomRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
   }, [messages, streaming]);
 
   async function handleAsk(e: FormEvent) {
@@ -143,7 +145,7 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
             <button
               type="button"
               onClick={() => setConfirmClear(true)}
-              className="text-xs text-stone-500 dark:text-stone-400 hover:text-[var(--ink)] underline-offset-2 hover:underline"
+              className="text-xs text-fg-secondary hover:text-[var(--ink)] underline-offset-2 hover:underline"
             >
               Clear conversation
             </button>
@@ -151,12 +153,12 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
         )}
         {messages.length === 0 && !asking && !loadingHistory && (
           <div className="h-full flex flex-col items-center justify-center text-center gap-1.5">
-            <p className="text-sm text-stone-600 dark:text-stone-400">Ask anything about {topic?.name ?? "this topic"}.</p>
-            <p className="text-xs text-stone-500 dark:text-stone-500">Answers are grounded in the material you&apos;ve uploaded.</p>
+            <p className="text-sm text-fg-secondary">Ask anything about {topic?.name ?? "this topic"}.</p>
+            <p className="text-xs text-fg-tertiary">Answers are grounded in the material you&apos;ve uploaded.</p>
           </div>
         )}
         {loadingHistory && (
-          <p className="text-xs text-stone-500 dark:text-stone-400 text-center">Loading conversation...</p>
+          <p className="text-xs text-fg-secondary text-center">Loading conversation...</p>
         )}
         {messages.map((m, i) => {
           if (m.role === "error") {
@@ -193,7 +195,7 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
                       <Badge
                         key={si}
                         variant="secondary"
-                        className="text-[11px] font-normal text-stone-600 dark:text-stone-400"
+                        className="text-[11px] font-normal text-fg-tertiary"
                       >
                         {s.source}
                         {s.page != null ? `, p. ${s.page}` : ""}
@@ -216,7 +218,7 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
           <div className="flex justify-start" aria-live="polite">
             <div className="max-w-2xl rounded-2xl px-4 py-2.5 text-sm surface text-[var(--ink)]">
               {streaming === "" ? (
-                <span className="text-stone-500 dark:text-stone-400">
+                <span className="text-fg-secondary">
                   Thinking... this can take a minute on a CPU.
                 </span>
               ) : (
@@ -236,7 +238,7 @@ export default function ChatView({ topicId }: { topicId: number | null }) {
             disabled={!topicId || asking}
             maxLength={4000}
             placeholder={topicId ? "Ask a question..." : "Select a topic to start"}
-            className="flex-1 border-0 shadow-none bg-transparent h-auto p-0 focus-visible:ring-0 text-sm text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 disabled:opacity-50"
+            className="flex-1 border-0 shadow-none bg-transparent h-auto p-0 focus-visible:ring-0 text-sm text-[var(--ink)] placeholder:text-fg-placeholder disabled:opacity-50"
           />
           {asking ? (
             // Distinct keys: otherwise React reuses this very element for the

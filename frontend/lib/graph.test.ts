@@ -32,6 +32,8 @@ import { groupNodesByModule, MODULE_TINTS, moduleTintIndex, tintFor, visibleNode
 import {
   anyRectVisible,
   clampZoom,
+  fitViewport,
+  readableFitViewport,
   rectFits,
   revealDelta,
   stepZoom,
@@ -443,6 +445,56 @@ test("clampZoom and zoomPercent", () => {
   assert.equal(zoomPercent(0.6584), 66);
   assert.equal(zoomPercent(1.75), 175);
   assert.equal(zoomPercent(1), 100);
+});
+
+// --- readable default viewport ------------------------------------------------------
+const FIT = { padding: 0.08, maxZoom: 1.1 };
+const READABLE = { ...FIT, minReadableZoom: 0.75 };
+const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
+// Seven columns wide, one row tall: the shape that shrinks to an unreadable zoom on a phone.
+const WIDE_GRAPH = { left: 0, top: 0, right: 1330, bottom: 308 };
+
+test("fitViewport matches the React Flow fit formula", () => {
+  const f = fitViewport({ left: 0, top: 0, right: 1000, bottom: 400 }, { width: 1200, height: 800 }, { padding: 0.08, maxZoom: 2 });
+  near(f.zoom, 1200 / (1000 * 1.08));
+  near(f.x, 600 - 500 * f.zoom);
+  near(f.y, 400 - 200 * f.zoom);
+  assert.equal(fitViewport({ left: 0, top: 0, right: 100, bottom: 100 }, { width: 5000, height: 5000 }, FIT).zoom, 1.1);
+});
+test("readable fit: a canvas wide enough for the graph gets exactly the normal fit", () => {
+  const canvas = { width: 1440, height: 600 };
+  assert.deepEqual(readableFitViewport(WIDE_GRAPH, canvas, READABLE), fitViewport(WIDE_GRAPH, canvas, FIT));
+  near(readableFitViewport(WIDE_GRAPH, canvas, READABLE).zoom, 1440 / (1330 * 1.08));
+});
+test("readable fit: a graph that fits at 0.75 or more is unchanged (and the floor is inclusive)", () => {
+  const roomy = { width: 1100, height: 600 };
+  assert.deepEqual(readableFitViewport(WIDE_GRAPH, roomy, READABLE), fitViewport(WIDE_GRAPH, roomy, FIT));
+  const exact = { width: 0.75 * 1330 * 1.08, height: 600 };
+  assert.deepEqual(readableFitViewport(WIDE_GRAPH, exact, READABLE), fitViewport(WIDE_GRAPH, exact, FIT));
+  // Just above the floor keeps the fit; just below switches to the floor.
+  const above = { width: 0.76 * 1330 * 1.08, height: 600 };
+  near(readableFitViewport(WIDE_GRAPH, above, READABLE).zoom, 0.76);
+  const below = { width: 0.74 * 1330 * 1.08, height: 600 };
+  near(readableFitViewport(WIDE_GRAPH, below, READABLE).zoom, 0.75);
+});
+test("readable fit: a narrow canvas holds zoom 0.75, left-aligned with padding, centred vertically", () => {
+  const canvas = { width: 390, height: 600 };
+  const v = readableFitViewport(WIDE_GRAPH, canvas, READABLE);
+  assert.equal(v.zoom, 0.75);
+  near(v.x, (390 * 0.08) / (2 * 1.08)); // left edge (graph x = 0) sits at the left margin of the normal fit
+  near(v.y, 300 - 154 * 0.75); // graph centre on canvas centre
+  const offset = { left: 200, top: 40, right: 1530, bottom: 348 };
+  const o = readableFitViewport(offset, canvas, READABLE);
+  near(o.x, (390 * 0.08) / (2 * 1.08) - 200 * 0.75); // the left edge, wherever the graph sits
+  near(o.y, 300 - 194 * 0.75);
+  assert.ok(fitViewport(WIDE_GRAPH, canvas, FIT).zoom < 0.3); // the unreadable zoom this replaces
+});
+test("readable fit: a graph taller than the canvas is still centred; maxZoom is respected", () => {
+  const tall = readableFitViewport({ left: 0, top: 0, right: 1330, bottom: 2000 }, { width: 390, height: 600 }, READABLE);
+  assert.equal(tall.zoom, 0.75);
+  near(tall.y, 300 - 1000 * 0.75);
+  assert.equal(readableFitViewport(WIDE_GRAPH, { width: 390, height: 600 }, { ...READABLE, maxZoom: 0.5 }).zoom, 0.5);
+  assert.equal(readableFitViewport({ left: 0, top: 0, right: 100, bottom: 100 }, { width: 5000, height: 5000 }, { ...READABLE, maxZoom: 0.9 }).zoom, 0.9);
 });
 
 console.log(`\n${passed} passed`);

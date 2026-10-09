@@ -58,7 +58,7 @@ function TopicLink({
       >
         <StatusIcon status={status} size={12} />
         <span className="min-w-0 flex-1 truncate">{topic.name}</span>
-        <span className="shrink-0 text-[10px] text-[var(--ink)]/60">{STATUS_LABEL[status]}</span>
+        <span className="shrink-0 text-[10px] text-fg-tertiary">{STATUS_LABEL[status]}</span>
       </button>
       {onRemove && (
         <button
@@ -67,7 +67,7 @@ function TopicLink({
           disabled={removeDisabled}
           aria-label={`Remove prerequisite ${topic.name}`}
           title="Remove this prerequisite"
-          className="shrink-0 rounded-md p-1 text-[var(--ink)]/50 transition hover:bg-[rgba(var(--ink-rgb),0.08)] hover:text-[var(--status-missed)] disabled:opacity-40"
+          className="shrink-0 rounded-md p-1 text-fg-tertiary transition hover:bg-[rgba(var(--ink-rgb),0.08)] hover:text-[var(--status-missed)] disabled:opacity-40"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
@@ -137,7 +137,7 @@ export default function TopicDetailPanel({
           type="button"
           onClick={onClose}
           aria-label="Close details"
-          className="-mr-1 -mt-1 rounded-md p-1 text-[var(--ink)]/60 transition hover:bg-[rgba(var(--ink-rgb),0.08)] hover:text-[var(--ink)]"
+          className="-mr-1 -mt-1 rounded-md p-1 text-fg-tertiary transition hover:bg-[rgba(var(--ink-rgb),0.08)] hover:text-[var(--ink)]"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
@@ -147,7 +147,7 @@ export default function TopicDetailPanel({
 
       <dl className="mt-3 space-y-2 text-xs">
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-[var(--ink)]/60">Mastery</dt>
+          <dt className="text-fg-tertiary">Mastery</dt>
           <dd className="flex items-center gap-1.5 font-medium text-[var(--ink)]">
             <StatusIcon status={status} size={12} />
             {score}% · {STATUS_LABEL[status]}
@@ -157,7 +157,7 @@ export default function TopicDetailPanel({
           <div className="h-full rounded-full" style={{ width: `${score}%`, background: STATUS_COLOR[status] }} />
         </div>
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-[var(--ink)]/60">Learning path</dt>
+          <dt className="text-fg-tertiary">Learning path</dt>
           <dd className="flex items-center gap-1.5 font-medium text-[var(--ink)]">
             <PathIcon state={pathState} size={12} />
             {PATH_LABEL[pathState]}
@@ -166,7 +166,7 @@ export default function TopicDetailPanel({
       </dl>
 
       <section className="mt-4">
-        <h4 className="text-[11px] font-medium text-[var(--ink)]/60">
+        <h4 className="text-[11px] font-medium text-fg-tertiary">
           Prerequisites{totalBefore > prerequisites.length ? ` · ${totalBefore} topics lead here` : ""}
         </h4>
         {prerequisites.length ? (
@@ -182,7 +182,7 @@ export default function TopicDetailPanel({
             ))}
           </ul>
         ) : (
-          <p className="mt-1 text-xs text-[var(--ink)]/60">None — a good place to start.</p>
+          <p className="mt-1 text-xs text-fg-tertiary">None — a good place to start.</p>
         )}
 
         {candidates.length > 0 ? (
@@ -216,7 +216,7 @@ export default function TopicDetailPanel({
             </Button>
           </form>
         ) : (
-          <p className="mt-2 text-[11px] text-[var(--ink)]/50">No other topics can be added here.</p>
+          <p className="mt-2 text-[11px] text-fg-tertiary">No other topics can be added here.</p>
         )}
         {editError && (
           <p role="alert" className="mt-1.5 text-xs text-[var(--error-text)]">
@@ -226,7 +226,7 @@ export default function TopicDetailPanel({
       </section>
 
       <section className="mt-3">
-        <h4 className="text-[11px] font-medium text-[var(--ink)]/60">
+        <h4 className="text-[11px] font-medium text-fg-tertiary">
           Unlocks{totalAfter > unlocks.length ? ` · ${totalAfter} topics build on this` : ""}
         </h4>
         {unlocks.length ? (
@@ -236,7 +236,7 @@ export default function TopicDetailPanel({
             ))}
           </ul>
         ) : (
-          <p className="mt-1 text-xs text-[var(--ink)]/60">Nothing depends on this yet.</p>
+          <p className="mt-1 text-xs text-fg-tertiary">Nothing depends on this yet.</p>
         )}
       </section>
 

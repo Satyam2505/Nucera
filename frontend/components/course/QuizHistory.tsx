@@ -58,9 +58,9 @@ export default function QuizHistory({ topicId, refreshKey, openId, onOpen }: Pro
           <li key={q.id} className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0">
               <p className="text-sm text-[var(--ink)]">
-                {dateLabel(q.created_at)} <span className="text-stone-500 dark:text-stone-400">· {questionCount(q.question_count)}</span>
+                {dateLabel(q.created_at)} <span className="text-fg-tertiary">· {questionCount(q.question_count)}</span>
               </p>
-              <p className="text-xs text-stone-600 dark:text-stone-300">{summaryResult(q)}</p>
+              <p className="text-xs text-fg-secondary">{summaryResult(q)}</p>
             </div>
             <Button
               type="button"

@@ -129,7 +129,7 @@ function PrerequisiteEdge({
             <p className="font-medium text-[var(--ink)]">
               {data.sourceName} → {data.targetName}
             </p>
-            <p className="mt-0.5 text-[var(--ink)]/70">
+            <p className="mt-0.5 text-fg-secondary">
               {data.sourceName} is a prerequisite for {data.targetName}.
             </p>
           </div>

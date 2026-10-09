@@ -217,7 +217,7 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
   }
 
   if (topicId === null) {
-    return <div className="p-8 text-sm text-stone-500 dark:text-stone-400">Select a topic to take its quiz.</div>;
+    return <div className="p-8 text-sm text-fg-secondary">Select a topic to take its quiz.</div>;
   }
 
   return (
@@ -225,7 +225,7 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
       <h2 className="text-lg font-semibold text-[var(--ink)]">Quiz — {topic?.name}</h2>
 
       {pastId !== null && (phase.kind === "quiz" || phase.kind === "results") && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-[rgba(var(--ink-rgb),0.12)] px-3 py-2 text-xs text-stone-600 dark:text-stone-300">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-[rgba(var(--ink-rgb),0.12)] px-3 py-2 text-xs text-fg-secondary">
           <span>You are looking at a past quiz.</span>
           <button type="button" onClick={load} className="font-medium text-[var(--accent)] hover:underline">
             Back to the latest quiz
@@ -240,7 +240,7 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
       )}
 
       {phase.kind === "loading" && (
-        <p role="status" className="text-sm text-stone-500 dark:text-stone-400">
+        <p role="status" className="text-sm text-fg-secondary">
           Loading quiz...
         </p>
       )}
@@ -259,7 +259,7 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
       {phase.kind === "no-material" && (
         <Card className="surface rounded-xl p-5 space-y-3 border-[rgba(var(--ink-rgb),0.09)]">
           <p className="text-sm font-medium text-[var(--ink)]">Add study material first</p>
-          <p className="text-sm text-stone-600 dark:text-stone-300">
+          <p className="text-sm text-fg-secondary">
             A quiz is written from the notes you upload for this topic, and there is nothing here yet.
           </p>
           <Button onClick={onAddSource} className={primaryButton}>
@@ -271,7 +271,7 @@ export default function QuizView({ topicId, refreshKey = 0, onAddSource }: Props
       {phase.kind === "empty" && (
         <Card className="surface rounded-xl p-5 space-y-3 border-[rgba(var(--ink-rgb),0.09)]">
           <p className="text-sm font-medium text-[var(--ink)]">No quiz yet</p>
-          <p className="text-sm text-stone-600 dark:text-stone-300">
+          <p className="text-sm text-fg-secondary">
             Generate a short quiz written from your uploaded material for this topic.
           </p>
           <Button onClick={generate} className={primaryButton}>
@@ -343,7 +343,7 @@ function GeneratingCard({ job }: { job: QuizJob }) {
           style={{ width: `${Math.max(percent, 4)}%` }}
         />
       </div>
-      <p className="text-sm text-stone-600 dark:text-stone-300">
+      <p className="text-sm text-fg-secondary">
         Each question takes a couple of minutes on a CPU. You can leave this page; the quiz keeps being written
         and will be here when you come back.
       </p>
@@ -368,7 +368,7 @@ function QuizForm({ set, answers, onAnswer, submitting, error, onSubmit }: FormP
 
   return (
     <div className="space-y-4">
-      <p aria-live="polite" className="text-sm text-stone-600 dark:text-stone-300">
+      <p aria-live="polite" className="text-sm text-fg-secondary">
         {done} of {set.questions.length} answered
       </p>
 
@@ -392,7 +392,7 @@ function QuizForm({ set, answers, onAnswer, submitting, error, onSubmit }: FormP
                 />
                 <Label
                   htmlFor={`q${q.id}-${key}`}
-                  className="text-sm font-normal text-stone-700 dark:text-stone-300 cursor-pointer"
+                  className="text-sm font-normal text-fg-secondary cursor-pointer"
                 >
                   {key}. {label}
                 </Label>
@@ -412,7 +412,7 @@ function QuizForm({ set, answers, onAnswer, submitting, error, onSubmit }: FormP
         {submitting ? "Submitting..." : "Submit answers"}
       </Button>
       {!complete && (
-        <p className="text-xs text-center text-stone-500 dark:text-stone-400">
+        <p className="text-xs text-center text-fg-tertiary">
           Answer every question to submit.
         </p>
       )}

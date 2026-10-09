@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 const inputClass =
-  "linen text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus-visible:ring-[rgba(var(--accent-rgb),0.30)]";
+  "linen text-[var(--ink)] placeholder:text-fg-placeholder focus-visible:ring-[rgba(var(--accent-rgb),0.30)]";
 
 interface Props {
   title: string;
@@ -66,7 +66,7 @@ export default function NameDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="name-dialog-name" className="text-xs font-medium text-stone-600 dark:text-stone-300">
+            <Label htmlFor="name-dialog-name" className="text-xs font-medium text-fg-secondary">
               {nameLabel}
             </Label>
             <Input
@@ -83,7 +83,7 @@ export default function NameDialog({
             <div className="space-y-1.5">
               <Label
                 htmlFor="name-dialog-description"
-                className="text-xs font-medium text-stone-600 dark:text-stone-300"
+                className="text-xs font-medium text-fg-secondary"
               >
                 Description (optional)
               </Label>

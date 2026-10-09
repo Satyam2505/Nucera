@@ -74,3 +74,56 @@ export function stepZoom(current: number, direction: 1 | -1, step: number, min: 
 export function zoomPercent(zoom: number): number {
   return Math.round(zoom * 100);
 }
+
+export interface Camera {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export interface FitOptions {
+  /** Fraction of extra space around the graph, as React Flow's `fitView` padding. */
+  padding: number;
+  maxZoom: number;
+}
+
+/**
+ * The camera React Flow's `fitView` would pick for `bounds` (graph coordinates) on a
+ * canvas of `canvas` pixels: the whole graph, centred, at the largest zoom that fits.
+ * Same formula as React Flow's getViewportForBounds, minus its lower zoom clamp.
+ */
+export function fitViewport(bounds: Rect, canvas: { width: number; height: number }, options: FitOptions): Camera {
+  const width = Math.max(bounds.right - bounds.left, 1);
+  const height = Math.max(bounds.bottom - bounds.top, 1);
+  const xZoom = canvas.width / (width * (1 + options.padding));
+  const yZoom = canvas.height / (height * (1 + options.padding));
+  const zoom = Math.min(options.maxZoom, Math.min(xZoom, yZoom));
+  return {
+    x: canvas.width / 2 - ((bounds.left + bounds.right) / 2) * zoom,
+    y: canvas.height / 2 - ((bounds.top + bounds.bottom) / 2) * zoom,
+    zoom,
+  };
+}
+
+/**
+ * The default camera: the whole graph when that is at least `minReadableZoom`.
+ * A wide, short graph on a narrow canvas would otherwise shrink to an unreadable
+ * size, so below that floor the zoom is held at `minReadableZoom` (never above
+ * `maxZoom`), the graph's left edge sits where the normal fit would leave its left
+ * margin, and the graph is centred vertically. The rest is reachable by panning.
+ */
+export function readableFitViewport(
+  bounds: Rect,
+  canvas: { width: number; height: number },
+  options: FitOptions & { minReadableZoom: number }
+): Camera {
+  const fit = fitViewport(bounds, canvas, options);
+  if (fit.zoom >= options.minReadableZoom) return fit;
+  const zoom = Math.min(options.minReadableZoom, options.maxZoom);
+  const leftMargin = (canvas.width * options.padding) / (2 * (1 + options.padding));
+  return {
+    x: leftMargin - bounds.left * zoom,
+    y: canvas.height / 2 - ((bounds.top + bounds.bottom) / 2) * zoom,
+    zoom,
+  };
+}

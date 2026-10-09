@@ -23,7 +23,7 @@ import { groupTopicsByModule } from "@/lib/courses";
 const SOURCE_TYPES = ["official_upload", "self_supplied", "web_fallback"];
 
 const inputClass =
-  "linen text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus-visible:ring-[rgba(var(--accent-rgb),0.30)]";
+  "linen text-[var(--ink)] placeholder:text-fg-placeholder focus-visible:ring-[rgba(var(--accent-rgb),0.30)]";
 
 export default function UploadModal({
   onClose,
@@ -81,7 +81,7 @@ export default function UploadModal({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Topic</Label>
+            <Label className="text-xs font-medium text-fg-secondary">Topic</Label>
             <Select
               value={topicId ? String(topicId) : ""}
               onValueChange={(v) => setTopicId(Number(v))}
@@ -106,14 +106,14 @@ export default function UploadModal({
               </SelectContent>
             </Select>
             {topics.length === 0 && (
-              <p className="text-xs text-stone-500 dark:text-stone-400">
+              <p className="text-xs text-fg-tertiary">
                 Add a module and a topic inside a course first, then attach sources to it.
               </p>
             )}
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Source type</Label>
+            <Label className="text-xs font-medium text-fg-secondary">Source type</Label>
             <Select value={sourceType} onValueChange={setSourceType}>
               <SelectTrigger className={`w-full ${inputClass}`}>
                 <SelectValue />
@@ -129,7 +129,7 @@ export default function UploadModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Title</Label>
+            <Label className="text-xs font-medium text-fg-secondary">Title</Label>
             <Input
               className={inputClass}
               value={title}
@@ -139,7 +139,7 @@ export default function UploadModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Paste text</Label>
+            <Label className="text-xs font-medium text-fg-secondary">Paste text</Label>
             <Textarea
               className={`${inputClass} h-28`}
               value={text}
@@ -149,16 +149,16 @@ export default function UploadModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-stone-600 dark:text-stone-300">Or upload a file</Label>
+            <Label className="text-xs font-medium text-fg-secondary">Or upload a file</Label>
             <Input
               type="file"
               // What the server accepts; it still checks, this just keeps the picker honest.
               accept=".pdf,.docx,.pptx,.txt,.md"
               aria-describedby="upload-file-hint"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="text-sm text-stone-600 dark:text-stone-300 file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--accent)] file:text-[var(--accent-ink)] file:px-3 file:py-1.5 file:text-xs hover:file:bg-[var(--accent-hover)] h-auto py-1.5"
+              className="text-sm text-fg-secondary file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--accent)] file:text-[var(--accent-ink)] file:px-3 file:py-1.5 file:text-xs hover:file:bg-[var(--accent-hover)] h-auto py-1.5"
             />
-            <p id="upload-file-hint" className="text-[11px] text-stone-500 dark:text-stone-400">
+            <p id="upload-file-hint" className="text-[11px] text-fg-tertiary">
               PDF, Word (.docx), PowerPoint (.pptx), .txt or .md files. Scanned PDFs are read with OCR when it is installed.
             </p>
           </div>
@@ -171,7 +171,7 @@ export default function UploadModal({
             {submitting ? "Adding..." : "Add source"}
           </Button>
 
-          {status && <p className="text-xs text-stone-600 dark:text-stone-300 text-center">{status}</p>}
+          {status && <p className="text-xs text-fg-secondary text-center">{status}</p>}
         </form>
       </DialogContent>
     </Dialog>

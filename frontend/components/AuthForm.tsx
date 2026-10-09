@@ -42,7 +42,7 @@ export default function AuthForm() {
             <img src="/nucera-mark.svg" alt="" className="h-8 w-8" />
             <h1 className="font-brand text-xl font-semibold tracking-tight text-[var(--ink)]">nucera</h1>
           </div>
-          <p className="text-sm text-stone-500 dark:text-stone-400">
+          <p className="text-sm text-fg-secondary">
             {mode === "login" ? "Log in to your courses." : "Create an account to get started."}
           </p>
         </CardHeader>
@@ -50,7 +50,7 @@ export default function AuthForm() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-xs font-medium text-stone-600 dark:text-stone-300">
+              <Label htmlFor="email" className="text-xs font-medium text-fg-secondary">
                 Email
               </Label>
               <Input
@@ -61,11 +61,11 @@ export default function AuthForm() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="linen text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus-visible:ring-[rgba(var(--accent-rgb),0.30)]"
+                className="linen text-[var(--ink)] placeholder:text-fg-placeholder focus-visible:ring-[rgba(var(--accent-rgb),0.30)]"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password" className="text-xs font-medium text-stone-600 dark:text-stone-300">
+              <Label htmlFor="password" className="text-xs font-medium text-fg-secondary">
                 Password
               </Label>
               <Input
@@ -77,12 +77,12 @@ export default function AuthForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={mode === "register" ? "At least 8 characters" : "••••••••"}
-                className="linen text-[var(--ink)] placeholder:text-stone-400 dark:placeholder:text-stone-500 focus-visible:ring-[rgba(var(--accent-rgb),0.30)]"
+                className="linen text-[var(--ink)] placeholder:text-fg-placeholder focus-visible:ring-[rgba(var(--accent-rgb),0.30)]"
               />
             </div>
 
             {sessionExpired && !error && (
-              <p role="status" className="text-xs text-stone-600 dark:text-stone-300">
+              <p role="status" className="text-xs text-fg-secondary">
                 Your session has expired. Please log in again.
               </p>
             )}
@@ -114,7 +114,7 @@ export default function AuthForm() {
               setMode((m) => (m === "login" ? "register" : "login"));
               setError(null);
             }}
-            className="w-full text-center text-xs text-stone-500 dark:text-stone-400 hover:text-[var(--ink)] mt-5 h-auto no-underline hover:no-underline"
+            className="w-full text-center text-xs text-fg-secondary hover:text-[var(--ink)] mt-5 h-auto no-underline hover:no-underline"
           >
             {mode === "login" ? "No account yet? Create one" : "Already have an account? Log in"}
           </Button>

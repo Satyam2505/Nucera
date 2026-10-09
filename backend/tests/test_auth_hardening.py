@@ -119,11 +119,18 @@ def test_the_flag_defaults_to_off_so_a_fresh_install_must_set_a_secret():
 
     backend = Path(__file__).resolve().parent.parent
     env = {k: v for k, v in os.environ.items() if k not in ("NUCERA_DEV", "JWT_SECRET_KEY")}
+    # This simulates a fresh installation, so it must not inherit settings from a
+    # developer's local backend/.env (which normally defines JWT_SECRET_KEY): app.config
+    # calls load_dotenv() when imported, so replace it with a no-op first.
+    code = (
+        "import dotenv; dotenv.load_dotenv = lambda *args, **kwargs: False; "
+        "import app.config as c; print(c.NUCERA_DEV, c.JWT_SECRET_KEY == c.DEFAULT_JWT_SECRET)"
+    )
     out = subprocess.run(
-        [sys.executable, "-c", "import app.config as c; print(c.NUCERA_DEV, c.JWT_SECRET_KEY == c.DEFAULT_JWT_SECRET)"],
+        [sys.executable, "-c", code],
         cwd=backend, env=env, capture_output=True, text=True,
     )
-    assert out.stdout.strip() == "False True"
+    assert out.stdout.strip() == "False True", out.stderr
 
 
 # --- emails ----------------------------------------------------------------------------------------

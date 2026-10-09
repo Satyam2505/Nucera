@@ -4,7 +4,7 @@ import { memo } from "react";
 import { Handle, Position, type NodeProps } from "reactflow";
 
 import { NODE_HEIGHT, NODE_WIDTH } from "@/lib/graph-layout";
-import type { NodeRole } from "@/lib/graph-model";
+import { nodeOpacity, type NodeRole } from "@/lib/graph-model";
 import { STATUS_COLOR, STATUS_LABEL } from "@/lib/status-colors";
 
 import { useGraphUi } from "./graph-context";
@@ -22,7 +22,6 @@ export interface TopicNodeData {
   tint: string;
 }
 
-const OPACITY: Partial<Record<NodeRole, number>> = { dim: 0.72, muted: 0.45, faded: 0.14 };
 const CHIP: Partial<Record<NodeRole, string>> = { prereq: "Before", dependent: "After" };
 
 // Handles are required for edge geometry but connecting is disabled, so
@@ -47,8 +46,7 @@ function TopicNode({ data }: NodeProps<TopicNodeData>) {
   else if (role === "dependent") outline = "1.5px dashed var(--accent)";
   else if (path === "attention") boxShadow = "0 0 0 1.5px var(--status-missed), 0 1px 3px rgba(0,0,0,0.18)";
 
-  let opacity = OPACITY[role] ?? 1;
-  if (path === "later" && role === "none") opacity = 0.62;
+  const opacity = nodeOpacity(role, path);
 
   const chip = selected ? "Selected" : CHIP[role];
 
@@ -79,13 +77,13 @@ function TopicNode({ data }: NodeProps<TopicNodeData>) {
       <p className="line-clamp-2 text-[13px] font-medium leading-snug text-[var(--ink)]">{data.name}</p>
 
       <div>
-        <div className="flex items-center gap-1.5 text-[11px] text-[var(--ink)]/70">
+        <div className="flex items-center gap-1.5 text-[11px] text-fg-secondary">
           {path ? <PathIcon state={path} /> : <StatusIcon status={status} />}
           <span className="truncate">
             {path ? PATH_LABEL[path] : STATUS_LABEL[status]}
             {!path && status !== "unmastered" ? ` · ${score}%` : ""}
           </span>
-          <span className="ml-auto shrink-0 text-[10px] tabular-nums text-[var(--ink)]/50" title={data.moduleName}>
+          <span className="ml-auto shrink-0 text-[10px] tabular-nums text-fg-secondary" title={data.moduleName}>
             M{data.moduleNumber}
           </span>
         </div>

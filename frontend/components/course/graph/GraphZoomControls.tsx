@@ -19,7 +19,7 @@ interface Props {
 }
 
 const buttonClass =
-  "inline-flex h-7 items-center justify-center rounded-md text-[var(--ink)]/70 transition-colors " +
+  "inline-flex h-7 items-center justify-center rounded-md text-fg-secondary transition-colors " +
   "hover:bg-[rgba(var(--accent-rgb),0.14)] hover:text-[var(--accent-hover)] " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--accent-rgb),0.5)] " +
   "disabled:pointer-events-none disabled:opacity-35";

@@ -38,7 +38,7 @@ export default function CourseMenu({ course, onRenamed, onDeleted }: Props) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          className="shrink-0 p-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.08)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--accent-rgb),0.4)]"
+          className="shrink-0 p-1.5 rounded-lg text-fg-secondary hover:text-[var(--ink)] hover:bg-[rgba(var(--ink-rgb),0.08)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--accent-rgb),0.4)]"
           aria-label="Course actions"
           title="Course actions"
         >
