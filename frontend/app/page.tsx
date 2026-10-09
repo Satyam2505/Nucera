@@ -5,7 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 
 import AppSidebar from "@/components/AppSidebar";
 import CreateCourseModal from "@/components/CreateCourseModal";
+import LoadErrorNotice from "@/components/LoadErrorNotice";
 import { api } from "@/lib/api";
+import { failureReason } from "@/lib/api-errors";
+import { selectLibraryView } from "@/lib/app-state-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,11 +36,12 @@ function BookmarkIcon({ filled }: { filled: boolean }) {
 }
 
 export default function LandingPage() {
-  const { courses, topics, masteryByTopic, graph, loading, refresh } = useAppState();
+  const { courses, topics, masteryByTopic, graph, loading, loaded, error, refresh } = useAppState();
   const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [revisionError, setRevisionError] = useState<string | null>(null);
 
   const now = useDynamicGreeting();
   const period = useMemo(() => getTimePeriod(now), [now]);
@@ -76,9 +80,22 @@ export default function LandingPage() {
     [topics, masteryByTopic]
   );
 
+  // If the library could not be loaded at all there is nothing true to show
+  // (no courses, no counts), so say that instead of an empty library.
+  const view = selectLibraryView({ loading, loaded, error });
+  const retry = () => {
+    void refresh();
+  };
+
   async function toggleRevision(topicId: number) {
-    await api.toggleRevision(topicId);
-    refresh();
+    setRevisionError(null);
+    try {
+      await api.toggleRevision(topicId);
+    } catch (err) {
+      setRevisionError(`Couldn't update the revision list. ${failureReason(err)}`);
+      return;
+    }
+    await refresh();
   }
 
   return (
@@ -91,6 +108,8 @@ export default function LandingPage() {
       <AppSidebar
         courses={filtered}
         loading={loading}
+        loadError={view === "blocking-error" ? error : null}
+        onRetry={retry}
         onNewCourse={() => setShowCreate(true)}
         query={query}
         onQueryChange={setQuery}
@@ -98,113 +117,139 @@ export default function LandingPage() {
 
       <SidebarInset className="hero-gradient min-w-0 overflow-y-auto">
         <div className="min-h-full flex flex-col items-center px-6 py-16 gap-8">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <h1
-              key={greeting}
-              className="font-brand animate-in fade-in-0 duration-200 text-4xl sm:text-5xl font-semibold tracking-tight text-[var(--ink)]"
-            >
-              {greeting}
-            </h1>
-            <p
-              key={welcome.message}
-              className="animate-in fade-in-0 duration-200 text-base text-stone-500 dark:text-stone-400 max-w-md"
-            >
-              {welcome.message}
-            </p>
-            {welcome.cta && (
-              <Button asChild size="sm" className="mt-1">
-                <Link href={welcome.cta.href}>{welcome.cta.label}</Link>
-              </Button>
-            )}
-            {welcome.contextLine && (
-              <p className="text-xs text-stone-400 dark:text-stone-500">{welcome.contextLine}</p>
-            )}
-          </div>
-
-          <div className="w-full max-w-3xl grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card className="bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">
-              <CardHeader className="pb-2">
-                <CardDescription>Courses</CardDescription>
-                <CardTitle className="text-3xl text-[var(--ink)]">{courses.length}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card className="bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">
-              <CardHeader className="pb-2">
-                <CardDescription>Topics mastered</CardDescription>
-                <CardTitle className="text-3xl text-[var(--ink)]">
-                  {masteredCount}
-                  <span className="text-base font-normal text-stone-500 dark:text-stone-400">
-                    {" "}
-                    / {topics.length}
-                  </span>
-                </CardTitle>
-              </CardHeader>
-            </Card>
-            <Card className="bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">
-              <CardHeader className="pb-2">
-                <CardDescription>Revision list</CardDescription>
-                <CardTitle className="text-3xl text-[var(--ink)]">{revisionList.length}</CardTitle>
-              </CardHeader>
-            </Card>
-          </div>
-
-          {revisionList.length > 0 && (
-            <Card className="w-full max-w-3xl bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">
-              <CardHeader>
-                <CardTitle className="text-base text-[var(--ink)]">Revision list</CardTitle>
-                <CardDescription>Topics you&apos;ve flagged to come back to</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                {revisionList.map((topic) => (
-                  <div
-                    key={topic.id}
-                    className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-[rgba(var(--ink-rgb),0.05)] transition group"
-                  >
-                    <Link href={courseHref(topic.course_id)} className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-[var(--ink)] truncate">{topic.name}</p>
-                      <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{topicLocation(topic)}</p>
-                    </Link>
-                    <button
-                      onClick={() => toggleRevision(topic.id)}
-                      className="shrink-0 ml-3 p-1.5 rounded-lg text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.1)] transition"
-                      aria-label="Remove from revision list"
-                      title="Remove from revision list"
-                    >
-                      <BookmarkIcon filled />
-                    </button>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+          {view === "blocking-error" && (
+            <div className="w-full max-w-xl pt-8">
+              <LoadErrorNotice variant="load" reason={error ?? ""} onRetry={retry} />
+            </div>
           )}
+          {view === "ready-with-notice" && (
+            <div className="w-full max-w-3xl">
+              <LoadErrorNotice variant="refresh" reason={error ?? ""} onRetry={retry} />
+            </div>
+          )}
+          {/* Until the library has loaded there is nothing true to show: a greeting
+              and zero counts here would read as an empty library. */}
+          {view === "loading" && (
+            <p role="status" className="pt-8 text-sm text-stone-500 dark:text-stone-400">
+              Loading your courses...
+            </p>
+          )}
+          {(view === "ready" || view === "ready-with-notice") && (
+            <>
+              <div className="flex flex-col items-center gap-3 text-center">
+                <h1
+                  key={greeting}
+                  className="font-brand animate-in fade-in-0 duration-200 text-4xl sm:text-5xl font-semibold tracking-tight text-[var(--ink)]"
+                >
+                  {greeting}
+                </h1>
+                <p
+                  key={welcome.message}
+                  className="animate-in fade-in-0 duration-200 text-base text-stone-500 dark:text-stone-400 max-w-md"
+                >
+                  {welcome.message}
+                </p>
+                {welcome.cta && (
+                  <Button asChild size="sm" className="mt-1">
+                    <Link href={welcome.cta.href}>{welcome.cta.label}</Link>
+                  </Button>
+                )}
+                {welcome.contextLine && (
+                  <p className="text-xs text-stone-400 dark:text-stone-500">{welcome.contextLine}</p>
+                )}
+              </div>
 
-          {needsAttention.length > 0 && (
-            <Card className="w-full max-w-3xl bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">
-              <CardHeader>
-                <CardTitle className="text-base text-[var(--ink)]">Needs attention</CardTitle>
-                <CardDescription>Your lowest-mastery topics across every course</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                {needsAttention.map((topic) => {
-                  const mastery = masteryByTopic[topic.id];
-                  return (
-                    <Link
-                      key={topic.id}
-                      href={courseHref(topic.course_id)}
-                      className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-[rgba(var(--ink-rgb),0.05)] transition"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-[var(--ink)] truncate">{topic.name}</p>
-                        <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{topicLocation(topic)}</p>
+              <div className="w-full max-w-3xl grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Card className="bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">
+                  <CardHeader className="pb-2">
+                    <CardDescription>Courses</CardDescription>
+                    <CardTitle className="text-3xl text-[var(--ink)]">{courses.length}</CardTitle>
+                  </CardHeader>
+                </Card>
+                <Card className="bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">
+                  <CardHeader className="pb-2">
+                    <CardDescription>Topics mastered</CardDescription>
+                    <CardTitle className="text-3xl text-[var(--ink)]">
+                      {masteredCount}
+                      <span className="text-base font-normal text-stone-500 dark:text-stone-400">
+                        {" "}
+                        / {topics.length}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                </Card>
+                <Card className="bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">
+                  <CardHeader className="pb-2">
+                    <CardDescription>Revision list</CardDescription>
+                    <CardTitle className="text-3xl text-[var(--ink)]">{revisionList.length}</CardTitle>
+                  </CardHeader>
+                </Card>
+              </div>
+
+              {revisionList.length > 0 && (
+                <Card className="w-full max-w-3xl bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">
+                  <CardHeader>
+                    <CardTitle className="text-base text-[var(--ink)]">Revision list</CardTitle>
+                    <CardDescription>Topics you&apos;ve flagged to come back to</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-1">
+                    {revisionError && (
+                      <p role="alert" className="px-3 pb-1 text-xs text-[var(--error-text)]">
+                        {revisionError}
+                      </p>
+                    )}
+                    {revisionList.map((topic) => (
+                      <div
+                        key={topic.id}
+                        className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-[rgba(var(--ink-rgb),0.05)] transition group"
+                      >
+                        <Link href={courseHref(topic.course_id)} className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-[var(--ink)] truncate">{topic.name}</p>
+                          <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{topicLocation(topic)}</p>
+                        </Link>
+                        <button
+                          onClick={() => toggleRevision(topic.id)}
+                          className="shrink-0 ml-3 p-1.5 rounded-lg text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.1)] transition"
+                          aria-label="Remove from revision list"
+                          title="Remove from revision list"
+                        >
+                          <BookmarkIcon filled />
+                        </button>
                       </div>
-                      <Badge variant="outline" className="shrink-0 ml-3">
-                        {mastery?.score ?? 0}%
-                      </Badge>
-                    </Link>
-                  );
-                })}
-              </CardContent>
-            </Card>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {needsAttention.length > 0 && (
+                <Card className="w-full max-w-3xl bg-[var(--bg-surface)] border-[rgba(var(--ink-rgb),0.1)]">
+                  <CardHeader>
+                    <CardTitle className="text-base text-[var(--ink)]">Needs attention</CardTitle>
+                    <CardDescription>Your lowest-mastery topics across every course</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-1">
+                    {needsAttention.map((topic) => {
+                      const mastery = masteryByTopic[topic.id];
+                      return (
+                        <Link
+                          key={topic.id}
+                          href={courseHref(topic.course_id)}
+                          className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-[rgba(var(--ink-rgb),0.05)] transition"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-[var(--ink)] truncate">{topic.name}</p>
+                            <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{topicLocation(topic)}</p>
+                          </div>
+                          <Badge variant="outline" className="shrink-0 ml-3">
+                            {mastery?.score ?? 0}%
+                          </Badge>
+                        </Link>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
         </div>
       </SidebarInset>

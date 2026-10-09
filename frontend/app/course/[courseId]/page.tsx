@@ -1,5 +1,6 @@
 "use client";
 
+import { TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
@@ -15,8 +16,10 @@ import QuizView from "@/components/course/QuizView";
 import SourcesView from "@/components/course/SourcesView";
 import ViewTabs, { type ViewKey } from "@/components/course/ViewTabs";
 import { Button } from "@/components/ui/button";
+import LoadErrorNotice from "@/components/LoadErrorNotice";
 import UploadModal from "@/components/UploadModal";
 import { api, CourseTree } from "@/lib/api";
+import { failureReason } from "@/lib/api-errors";
 import { useAppState } from "@/lib/AppStateContext";
 import { useCourseTree } from "@/lib/useCourseTree";
 
@@ -76,7 +79,14 @@ export default function CourseWorkspace() {
   const router = useRouter();
   const courseId = parseCourseId(params.courseId);
 
-  const { masteryByTopic, selectedTopicId, setSelectedTopicId, refresh } = useAppState();
+  const {
+    masteryByTopic,
+    selectedTopicId,
+    setSelectedTopicId,
+    refresh,
+    error: libraryError,
+    loaded: libraryLoaded,
+  } = useAppState();
   const { state, reload, retry, setTree } = useCourseTree(courseId);
   const tree = state.status === "ready" ? state.tree : null;
 
@@ -88,6 +98,7 @@ export default function CourseWorkspace() {
   // own fetched list, not part of global AppState) refetches — otherwise
   // adding a source via the header button wouldn't show up there.
   const [sourcesRefreshKey, setSourcesRefreshKey] = useState(0);
+  const [revisionError, setRevisionError] = useState<string | null>(null);
 
   // Same reasoning as the landing page's AppSidebar: this 256px rail is an
   // overlay below md, so it should default closed there instead of covering
@@ -118,7 +129,14 @@ export default function CourseWorkspace() {
   );
 
   async function handleToggleRevision(topicId: number) {
-    await api.toggleRevision(topicId);
+    setRevisionError(null);
+    try {
+      await api.toggleRevision(topicId);
+    } catch (err) {
+      // Shown above the topic list; the bookmark simply stays as it was.
+      setRevisionError(`Couldn't update the revision list. ${failureReason(err)}`);
+      return;
+    }
     await refresh();
   }
 
@@ -183,6 +201,18 @@ export default function CourseWorkspace() {
         />
       </header>
 
+      {/* This page loads its own course, so it still works when the app-wide library
+          (topic names for the upload picker, mastery) could not be loaded; say so. */}
+      {libraryError && (
+        <div className="px-6 py-3 border-b border-[rgba(var(--ink-rgb),0.10)]">
+          <LoadErrorNotice
+            variant={libraryLoaded ? "refresh" : "load"}
+            reason={libraryError}
+            onRetry={() => void refresh()}
+          />
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1 overflow-hidden relative">
         {/* Positioned `absolute` within this already-below-header `relative`
             row (not `fixed`), so it fills exactly the remaining viewport
@@ -193,6 +223,15 @@ export default function CourseWorkspace() {
 
         {topicsOpen && (
           <aside className="w-64 max-w-[80vw] shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground overflow-y-auto p-3 absolute inset-y-0 left-0 z-40 md:relative md:inset-auto md:z-auto">
+            {revisionError && (
+              // The rail is dark navy in both themes, where the red error text token is
+              // too dark to read; the rail's own foreground colour always is, and the
+              // icon marks it as a warning without relying on colour.
+              <p role="alert" className="mb-2 flex items-start gap-1.5 px-2 text-xs text-sidebar-foreground">
+                <TriangleAlert size={13} aria-hidden className="mt-px shrink-0" />
+                <span>{revisionError}</span>
+              </p>
+            )}
             <ModuleRail
               tree={tree}
               activeTopicId={activeTopicId}

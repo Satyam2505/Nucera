@@ -6,7 +6,7 @@
 
 import assert from "node:assert/strict";
 
-import { errorDetail, isSessionExpiry } from "./api-errors";
+import { errorDetail, failureReason, isSessionExpiry } from "./api-errors";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -62,6 +62,36 @@ test("only a 401 that carried a token ends the session", () => {
   assert.equal(isSessionExpiry(403, true), false);
   assert.equal(isSessionExpiry(404, true), false);
   assert.equal(isSessionExpiry(500, true), false);
+});
+
+// A stand-in for ApiError (which lives in api.ts, with its token and fetch imports).
+class StatusError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+test("a server error reads as the server's own detail, as a sentence", () => {
+  assert.equal(failureReason(new StatusError(409, "Quiz generation already in progress")), "Quiz generation already in progress.");
+  assert.equal(failureReason(new StatusError(404, "Topic not found.")), "Topic not found.");
+  assert.equal(failureReason(new StatusError(500, "Request failed (500)")), "Request failed (500).");
+});
+
+test("fetch rejecting means the server can't be reached, whichever browser said so", () => {
+  const unreachable = "Can't reach the server. Check that the backend is running, then try again.";
+  for (const message of ["Failed to fetch", "NetworkError when attempting to fetch resource.", "Load failed"]) {
+    assert.equal(failureReason(new TypeError(message)), unreachable, message);
+  }
+});
+
+test("anything else is a plain generic line, never a raw exception message", () => {
+  assert.equal(failureReason(new TypeError("undefined is not iterable")), "Something went wrong.");
+  assert.equal(failureReason(new Error("boom")), "Something went wrong.");
+  assert.equal(failureReason(new StatusError(500, "   ")), "Something went wrong.");
+  assert.equal(failureReason("a string"), "Something went wrong.");
+  assert.equal(failureReason(undefined), "Something went wrong.");
 });
 
 console.log(`\n${passed} passed`);

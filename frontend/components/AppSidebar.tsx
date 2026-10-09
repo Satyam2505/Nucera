@@ -46,12 +46,18 @@ function countLabel(count: number, noun: string): string {
 export default function AppSidebar({
   courses,
   loading,
+  loadError = null,
+  onRetry,
   onNewCourse,
   query,
   onQueryChange,
 }: {
   courses: Course[];
   loading: boolean;
+  // Set only when the library could not be loaded at all: the list is then not
+  // "empty", it is unknown, so this replaces the "No courses yet." line.
+  loadError?: string | null;
+  onRetry?: () => void;
   onNewCourse: () => void;
   query: string;
   onQueryChange: (query: string) => void;
@@ -104,7 +110,24 @@ export default function AppSidebar({
                   Loading...
                 </p>
               )}
-              {!loading && courses.length === 0 && (
+              {loadError && (
+                <div
+                  role="alert"
+                  className="px-3 py-2 text-xs text-sidebar-foreground/80 group-data-[collapsible=icon]:hidden"
+                >
+                  <p>Couldn&apos;t load your courses.</p>
+                  {onRetry && (
+                    <button
+                      type="button"
+                      onClick={onRetry}
+                      className="mt-1 underline underline-offset-2 hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring rounded-sm"
+                    >
+                      Try again
+                    </button>
+                  )}
+                </div>
+              )}
+              {!loading && !loadError && courses.length === 0 && (
                 <p className="px-3 py-2 text-xs text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">
                   {query ? "No courses match your search." : "No courses yet."}
                 </p>
