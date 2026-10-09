@@ -113,7 +113,7 @@ export default function AppSidebar({
               {loadError && (
                 <div
                   role="alert"
-                  className="px-3 py-2 text-xs text-sidebar-foreground/80 group-data-[collapsible=icon]:hidden"
+                  className="px-3 py-2 text-xs text-sidebar-fg-secondary group-data-[collapsible=icon]:hidden"
                 >
                   <p>Couldn&apos;t load your courses.</p>
                   {onRetry && (
@@ -146,7 +146,7 @@ export default function AppSidebar({
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate">{course.name}</span>
-                          <span className="block truncate text-[11px] text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
+                          <span className="block truncate text-[11px] text-sidebar-fg-tertiary group-data-[collapsible=icon]:hidden">
                             {countLabel(course.module_count, "module")} · {countLabel(course.topic_count, "topic")}
                           </span>
                         </span>

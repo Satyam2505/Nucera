@@ -87,7 +87,7 @@ interface Props {
 }
 
 const triggerClass =
-  "shrink-0 p-1.5 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition " +
+  "shrink-0 p-1.5 rounded-lg text-sidebar-fg-tertiary hover:text-sidebar-foreground hover:bg-sidebar-accent transition " +
   "opacity-70 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring";
 
@@ -154,7 +154,7 @@ export default function ModuleRail({
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between px-2 pb-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-sidebar-foreground/60">Modules</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-sidebar-fg-tertiary">Modules</p>
         <button
           onClick={() => setDialog({ kind: "addModule" })}
           className="p-1.5 rounded-lg text-sidebar-fg-secondary hover:text-sidebar-foreground hover:bg-sidebar-accent transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
@@ -192,7 +192,7 @@ export default function ModuleRail({
               <button
                 onClick={() => toggleCollapsed(module.id)}
                 aria-expanded={open}
-                className="flex-1 min-w-0 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                className="flex-1 min-w-0 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-sidebar-fg-secondary hover:text-sidebar-foreground hover:bg-sidebar-accent transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
               >
                 <ChevronIcon open={open} />
                 <span className="shrink-0 tabular-nums">{moduleIndex + 1}.</span>
@@ -228,7 +228,7 @@ export default function ModuleRail({
               <div className="space-y-0.5 mt-0.5">
                 {module.topics.length === 0 && (
                   <div className="pl-7 pr-2 py-1.5 flex items-center gap-2">
-                    <p className="text-xs text-sidebar-foreground/60">No topics yet.</p>
+                    <p className="text-xs text-sidebar-fg-tertiary">No topics yet.</p>
                     <button
                       onClick={() => setDialog({ kind: "addTopic", module })}
                       className="text-xs font-medium text-[var(--accent)] hover:underline"
@@ -266,7 +266,7 @@ export default function ModuleRail({
                         className={`shrink-0 p-1.5 rounded-lg transition focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring ${
                           flagged
                             ? "text-[var(--accent)] opacity-100"
-                            : "text-sidebar-foreground/40 opacity-0 group-hover:opacity-100 hover:text-sidebar-foreground/80"
+                            : "text-sidebar-fg-tertiary opacity-0 group-hover:opacity-100 hover:text-sidebar-fg-secondary"
                         }`}
                         aria-label={flagged ? "Remove from revision list" : "Add to revision list"}
                         title={flagged ? "Remove from revision list" : "Add to revision list"}
