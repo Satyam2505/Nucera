@@ -189,6 +189,80 @@ def test_follow_up_questions_get_the_saved_conversation_as_context(client, topic
     assert "Tutor: The hash function turns a key into a bucket index." in prompts[1]
 
 
+FOLLOW_UP = "Why does that matter?"
+
+
+@pytest.fixture()
+def searches(monkeypatch):
+    """The text of every retrieval the tutor runs."""
+    seen = []
+    real = tutor_router.retrieve_relevant_chunks
+
+    def spy(db, question, **kwargs):
+        seen.append(question)
+        return real(db, question, **kwargs)
+
+    monkeypatch.setattr(tutor_router, "retrieve_relevant_chunks", spy)
+    return seen
+
+
+def test_a_vague_follow_up_is_searched_with_the_previous_question(client, topic, blocking_llm, searches):
+    prompts = blocking_llm()
+    client.post("/ask", json={"query": QUESTION, "topic_id": topic})
+    body = client.post("/ask", json={"query": FOLLOW_UP, "topic_id": topic}).json()
+
+    assert f"{QUESTION} {FOLLOW_UP}" in searches
+    assert body["grounded"] is True and body["sources"][0]["source"] == "Hash notes"
+    assert len(prompts) == 2 and "hash function" in prompts[1]
+
+
+def test_a_vague_first_question_is_still_refused_without_the_model(client, topic, blocking_llm, searches):
+    prompts = blocking_llm()
+    body = client.post("/ask", json={"query": FOLLOW_UP, "topic_id": topic}).json()
+    assert body["grounded"] is False and body["answer"] == INSUFFICIENT_MATERIAL_MESSAGE
+    assert prompts == [] and all(QUESTION not in s for s in searches)
+
+
+def test_a_question_relevant_on_its_own_is_searched_once(client, topic, blocking_llm, searches):
+    blocking_llm()
+    client.post("/ask", json={"query": QUESTION, "topic_id": topic})
+    client.post("/ask", json={"query": "How does a hash function compute a bucket index?", "topic_id": topic})
+    assert searches == [QUESTION, "How does a hash function compute a bucket index?"]
+
+
+@pytest.mark.parametrize(
+    "unrelated", ["Is that true for a chocolate cake recipe?", "What ingredients go into a chocolate cake?"]
+)
+def test_an_unrelated_follow_up_cannot_borrow_the_previous_questions_relevance(
+    client, topic, blocking_llm, searches, unrelated
+):
+    prompts = blocking_llm()
+    client.post("/ask", json={"query": QUESTION, "topic_id": topic})
+    body = client.post("/ask", json={"query": unrelated, "topic_id": topic}).json()
+
+    assert body["grounded"] is False and body["answer"] == INSUFFICIENT_MATERIAL_MESSAGE
+    assert len(prompts) == 1  # only the first, on-topic question reached the model
+    assert all(QUESTION not in s for s in searches[1:])
+
+
+def test_the_previous_question_comes_only_from_the_same_topic(client, topic, blocking_llm, searches):
+    blocking_llm()
+    other = make_topic(client, "Other", course="Test")["id"]
+    ingest(client, other)
+    client.post("/ask", json={"query": QUESTION, "topic_id": other})
+    body = client.post("/ask", json={"query": FOLLOW_UP, "topic_id": topic}).json()
+    assert body["grounded"] is False and f"{QUESTION} {FOLLOW_UP}" not in searches
+
+
+def test_the_streaming_route_searches_follow_ups_the_same_way(client, topic, blocking_llm, monkeypatch, searches):
+    blocking_llm()
+    client.post("/ask", json={"query": QUESTION, "topic_id": topic})
+    fake_stream(monkeypatch, ["Because lookups are fast."])
+    done = events(client.post("/ask/stream", json={"query": FOLLOW_UP, "topic_id": topic}))[-1]
+    assert done["type"] == "done" and done["grounded"] is True and done["sources"][0]["source"] == "Hash notes"
+    assert f"{QUESTION} {FOLLOW_UP}" in searches
+
+
 def test_history_sent_by_the_client_is_ignored(client, topic, blocking_llm):
     prompts = blocking_llm()
     resp = client.post(

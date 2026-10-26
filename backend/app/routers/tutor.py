@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import AsyncIterator, Iterator, List, Optional
 
@@ -13,6 +14,7 @@ from app.database import SessionLocal, get_db
 from app.deps import get_current_user
 from app.ownership import get_owned_topic
 from app.services import graph_service, llm_service
+from app.services.fts import query_terms
 from app.services.retrieval_service import retrieve_relevant_chunks
 from app.services.tutor_service import (
     PreparedAnswer,
@@ -31,6 +33,11 @@ router = APIRouter(tags=["tutor"])
 HISTORY_TURNS = 6
 # Most messages one GET /chat returns (the newest ones).
 CHAT_PAGE_LIMIT = 200
+# A question is read as a follow-up to the previous one only when it points back at it
+# ("Why does that matter?") and brings at most this many searchable words of its own;
+# a question with its own subject ("...a chocolate cake recipe?") is judged on its own.
+FOLLOW_UP_REFERENCES = frozenset("that this it its those these they them".split())
+FOLLOW_UP_MAX_TERMS = 2
 
 
 @dataclass
@@ -70,14 +77,31 @@ def _chunk_dict(match: dict, with_topic: bool = False) -> dict:
     return chunk
 
 
+def _is_follow_up(question: str) -> bool:
+    words = set(re.findall(r"\w+", question.lower()))
+    return bool(words & FOLLOW_UP_REFERENCES) and len(query_terms(question)) <= FOLLOW_UP_MAX_TERMS
+
+
 def _prepare_turn(db: Session, payload: schemas.AskRequest, user: models.User) -> _Turn:
     topic = get_owned_topic(db, payload.topic_id, user)
+    history = _recent_history(db, payload.topic_id)
 
     # 1. RAG grounding — the best passages from this topic's material.
     matches = retrieve_relevant_chunks(
         db, payload.query, user_id=user.id, topic_id=payload.topic_id, top_k=5
     )
     retrieved_chunks = [_chunk_dict(match) for match in matches]
+
+    # A follow-up ("Why does that matter?") shares no words with the notes; search
+    # again with this topic's previous question in front of it.
+    previous = next((m["text"] for m in reversed(history) if m["role"] == "user"), None)
+    if previous and not any(is_relevant(c) for c in retrieved_chunks) and _is_follow_up(payload.query):
+        matches = retrieve_relevant_chunks(
+            db, f"{previous} {payload.query}", user_id=user.id, topic_id=payload.topic_id, top_k=5
+        )
+        contextual = [_chunk_dict(match) for match in matches]
+        if any(is_relevant(c) for c in contextual):
+            retrieved_chunks = contextual
 
     # If the topic's own material has nothing relevant, look at the rest of the
     # course before giving up: the answer may be in another topic's notes. Those
@@ -123,7 +147,7 @@ def _prepare_turn(db: Session, payload: schemas.AskRequest, user: models.User) -
         topic_name=topic.name,
         topic_mastery_score=topic_score,
         prerequisite_gaps=prerequisite_gaps,
-        history=_recent_history(db, payload.topic_id),
+        history=history,
         from_other_topics=from_other_topics,
     )
     return _Turn(prepared=prepared, flagged_topics=flagged_topics)
