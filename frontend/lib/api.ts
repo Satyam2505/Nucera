@@ -260,6 +260,8 @@ export interface Source {
   title: string;
   created_at: string;
   chunk_count: number;
+  // Used by every topic of its topic's module.
+  shared_with_module: boolean;
 }
 
 export interface AskResponse {
@@ -356,11 +358,13 @@ export const api = {
     source_type: string;
     title: string;
     text: string;
+    shared_with_module?: boolean;
   }) => request(`/sources/text`, { method: "POST", body: JSON.stringify(payload) }),
-  uploadFile: async (topicId: number, sourceType: string, file: File) => {
+  uploadFile: async (topicId: number, sourceType: string, file: File, sharedWithModule = false) => {
     const formData = new FormData();
     formData.append("topic_id", String(topicId));
     formData.append("source_type", sourceType);
+    formData.append("shared_with_module", String(sharedWithModule));
     formData.append("file", file);
     // No Content-Type here: the browser sets the multipart boundary itself.
     const headers = authHeaders();

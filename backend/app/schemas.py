@@ -138,11 +138,13 @@ class SourceOut(BaseModel):
     title: str
     created_at: datetime
     chunk_count: int
+    shared_with_module: bool = False
 
 
 class IngestTextRequest(BaseModel):
     topic_id: int
     source_type: SourceType
+    shared_with_module: bool = False
     # Trimmed, non-empty, and no longer than the column.
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
     # Blank (or whitespace-only) text is a 422, not an empty source.

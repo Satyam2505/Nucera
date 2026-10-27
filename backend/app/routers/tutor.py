@@ -118,7 +118,9 @@ def _prepare_turn(db: Session, payload: schemas.AskRequest, user: models.User) -
         elsewhere = [
             _chunk_dict(match, with_topic=True)
             for match in wider
-            if match["chunk"].topic_id != topic.id  # this topic was just searched
+            # skip what was just searched: this topic's chunks and those shared with its module
+            if match["chunk"].topic_id != topic.id
+            and not (match["source"].shared_with_module and match["chunk"].topic.module_id == topic.module_id)
         ][:5]
         if any(is_relevant(c) for c in elsewhere):
             retrieved_chunks, from_other_topics = elsewhere, True
