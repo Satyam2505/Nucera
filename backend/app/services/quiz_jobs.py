@@ -31,6 +31,7 @@ from app import models
 from app.config import QUIZ_JOB_STALE_SECONDS, QUIZ_MAX_EXCERPTS
 from app.database import SessionLocal
 from app.services import quiz_service
+from app.services.retrieval_service import topic_material
 from app.services.quiz_service import (
     NO_MATERIAL_MESSAGE,
     NoMaterialError,
@@ -212,7 +213,7 @@ def run_job(job_id: int, rng: Optional[random.Random] = None) -> None:
                 )
             )
             .join(models.Source, models.Chunk.source_id == models.Source.id)
-            .filter(models.Chunk.topic_id == topic.id)
+            .filter(topic_material(topic.id))
             .all()
         )
         if not rows:

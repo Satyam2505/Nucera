@@ -17,6 +17,7 @@ tuning of score scales, which differ completely between cosine similarity and BM
 from typing import Dict, List, Optional
 
 import numpy as np
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app import models
@@ -33,6 +34,17 @@ def reciprocal_rank_fusion(rankings: List[List[int]], k: int = HYBRID_RRF_K) -> 
         for position, item in enumerate(ranking, start=1):
             scores[item] = scores.get(item, 0.0) + 1.0 / (k + position)
     return scores
+
+
+def topic_material(topic_id: int):
+    """Filter for the chunks a topic studies from: its own, plus those of sources shared
+    with its module. The query must join Chunk to Source."""
+    module_id = select(models.Topic.module_id).where(models.Topic.id == topic_id).scalar_subquery()
+    module_topics = select(models.Topic.id).where(models.Topic.module_id == module_id)
+    return or_(
+        models.Chunk.topic_id == topic_id,
+        and_(models.Source.shared_with_module.is_(True), models.Chunk.topic_id.in_(module_topics)),
+    )
 
 
 def retrieve_relevant_chunks(
@@ -71,7 +83,7 @@ def retrieve_relevant_chunks(
         .filter(models.Course.user_id == user_id)
     )
     if topic_id is not None:
-        query = query.filter(models.Chunk.topic_id == topic_id)
+        query = query.filter(topic_material(topic_id))
     if course_id is not None:
         query = query.filter(models.Course.id == course_id)
     if source_ids:

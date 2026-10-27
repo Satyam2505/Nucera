@@ -44,6 +44,9 @@ export default function UploadModal({
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [shared, setShared] = useState(false);
+  const moduleName = groups.find((g) => g.topics.some((t) => t.id === topicId))?.moduleName;
+  const topicName = topics.find((t) => t.id === topicId)?.name;
   const [status, setStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,13 +57,14 @@ export default function UploadModal({
     setStatus(null);
     try {
       if (file) {
-        await api.uploadFile(topicId, sourceType, file);
+        await api.uploadFile(topicId, sourceType, file, shared);
       } else {
         await api.ingestText({
           topic_id: topicId,
           source_type: sourceType,
           title: title || "Pasted notes",
           text,
+          shared_with_module: shared,
         });
       }
       await refresh();
@@ -111,6 +115,25 @@ export default function UploadModal({
               </p>
             )}
           </div>
+
+          {moduleName && (
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm text-[var(--ink)] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={shared}
+                  onChange={(e) => setShared(e.target.checked)}
+                  className="size-4 accent-[var(--accent)]"
+                />
+                Use for every topic in {moduleName}
+              </label>
+              {shared && (
+                <p className="text-[11px] text-fg-tertiary">
+                  Stored with {topicName}; deleting that topic also deletes this source.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-fg-secondary">Source type</Label>

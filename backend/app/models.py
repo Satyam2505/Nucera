@@ -207,6 +207,8 @@ class Source(Base):
     title = Column(String(255), nullable=False)
     raw_text = Column(Text, nullable=True)
     file_path = Column(String(500), nullable=True)
+    # Used by every topic in its topic's module, not only by its own topic.
+    shared_with_module = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     topic = relationship("Topic", back_populates="sources")

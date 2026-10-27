@@ -37,6 +37,7 @@ def _ingest_pages(
     title: str,
     pages: List[Tuple[Optional[int], str]],
     file_path: Optional[str] = None,
+    shared_with_module: bool = False,
 ) -> models.Source:
     """Chunk and embed first, then write the source and all its chunks in one
     transaction, so a failure part-way never leaves a source without chunks."""
@@ -57,6 +58,7 @@ def _ingest_pages(
         title=title,
         raw_text="\n\n".join(text for _, text in pages),
         file_path=file_path,
+        shared_with_module=shared_with_module,
     )
     for piece, embedding in zip(pieces, embeddings):
         source.chunks.append(
@@ -90,7 +92,10 @@ def ingest_text(
     if len(payload.text) > UPLOAD_MAX_BYTES:
         exc = _too_large("Text")
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
-    return _ingest_pages(db, topic, payload.source_type, payload.title, [(None, payload.text)])
+    return _ingest_pages(
+        db, topic, payload.source_type, payload.title, [(None, payload.text)],
+        shared_with_module=payload.shared_with_module,
+    )
 
 
 # A plain `def`, not `async def`: extracting a PDF and embedding the chunks are
@@ -104,6 +109,7 @@ def ingest_file(
     topic_id: int = Form(...),
     source_type: models.SourceType = Form(...),
     file: UploadFile = File(...),
+    shared_with_module: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -123,7 +129,10 @@ def ingest_file(
     except UploadRejected as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-    return _ingest_pages(db, topic, source_type, filename, pages, file_path=filename)
+    return _ingest_pages(
+        db, topic, source_type, filename, pages, file_path=filename,
+        shared_with_module=shared_with_module,
+    )
 
 
 @router.get("/topic/{topic_id}", response_model=list[schemas.SourceOut])
@@ -132,8 +141,19 @@ def list_sources_for_topic(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    get_owned_topic(db, topic_id, current_user)
-    return db.query(models.Source).filter(models.Source.topic_id == topic_id).all()
+    topic = get_owned_topic(db, topic_id, current_user)
+    # The topic's own sources, then those shared with its module by other topics.
+    shared = (
+        db.query(models.Source)
+        .join(models.Topic, models.Source.topic_id == models.Topic.id)
+        .filter(
+            models.Source.shared_with_module.is_(True),
+            models.Topic.module_id == topic.module_id,
+            models.Source.topic_id != topic_id,
+        )
+        .all()
+    )
+    return db.query(models.Source).filter(models.Source.topic_id == topic_id).all() + shared
 
 
 @router.delete("/{source_id}", status_code=204)

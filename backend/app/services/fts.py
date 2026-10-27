@@ -138,7 +138,11 @@ def search(
     clauses = ["chunks_fts MATCH :expression", "courses.user_id = :user_id"]
     params: Dict[str, object] = {"expression": expression, "user_id": user_id, "limit": limit}
     if topic_id is not None:
-        clauses.append("chunks.topic_id = :topic_id")
+        # same scope as retrieval_service.topic_material
+        clauses.append(
+            "(chunks.topic_id = :topic_id OR (sources.shared_with_module = 1 AND topics.module_id ="
+            " (SELECT module_id FROM topics WHERE id = :topic_id)))"
+        )
         params["topic_id"] = topic_id
     if course_id is not None:
         clauses.append("courses.id = :course_id")
@@ -152,6 +156,7 @@ def search(
         SELECT chunks.id
         FROM chunks_fts
         JOIN chunks ON chunks.id = chunks_fts.rowid
+        JOIN sources ON sources.id = chunks.source_id
         JOIN topics ON topics.id = chunks.topic_id
         JOIN modules ON modules.id = topics.module_id
         JOIN courses ON courses.id = modules.course_id

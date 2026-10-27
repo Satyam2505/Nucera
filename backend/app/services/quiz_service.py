@@ -33,6 +33,7 @@ from app.config import (
 from app.services import llm_service
 from app.services.chunking import MAX_CHARS as CHUNK_MAX_CHARS
 from app.services.context_budget import user_prompt_char_budget
+from app.services.retrieval_service import topic_material
 
 OPTION_KEYS = ("A", "B", "C", "D")
 # A new chunk is at most ~800 characters (chunking.MAX_CHARS); chunks stored
@@ -356,5 +357,9 @@ def generate_question(
 
 def topic_has_material(db: Session, topic_id: int) -> bool:
     return (
-        db.query(models.Chunk.id).filter(models.Chunk.topic_id == topic_id).first() is not None
+        db.query(models.Chunk.id)
+        .join(models.Source, models.Chunk.source_id == models.Source.id)
+        .filter(topic_material(topic_id))
+        .first()
+        is not None
     )

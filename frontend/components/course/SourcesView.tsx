@@ -127,6 +127,13 @@ export default function SourcesView({
                 <Badge variant="secondary" className="text-[10px]">
                   {SOURCE_TYPE_LABEL[source.source_type] ?? source.source_type}
                 </Badge>
+                {source.shared_with_module && (
+                  <Badge variant="outline" className="text-[10px]">
+                    {source.topic_id === topicId
+                      ? "Whole module"
+                      : `Whole module · from ${topics.find((t) => t.id === source.topic_id)?.name ?? "another topic"}`}
+                  </Badge>
+                )}
                 <span className="text-xs text-fg-tertiary">
                   {source.chunk_count} {source.chunk_count === 1 ? "chunk" : "chunks"} · added{" "}
                   {formatDate(source.created_at)}
@@ -155,7 +162,8 @@ export default function SourcesView({
                 <>
                   <span className="font-medium text-[var(--ink)]">{pendingDelete.title}</span> and its{" "}
                   {pendingDelete.chunk_count} indexed {pendingDelete.chunk_count === 1 ? "chunk" : "chunks"} will be
-                  permanently removed. This can&apos;t be undone.
+                  permanently removed{pendingDelete.shared_with_module ? " from every topic of the module" : ""}. This
+                  can&apos;t be undone.
                 </>
               )}
             </AlertDialogDescription>
